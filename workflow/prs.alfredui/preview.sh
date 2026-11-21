@@ -10,7 +10,9 @@ fi
 source ./cache.sh
 
 read_body() {
-    if [[ -r "$cache" ]]; then
+    if [[ "$dashboard_auth_resolved" != true ]]; then
+        printf 'Preview unavailable.'
+    elif [[ -r "$cache" ]]; then
         /usr/bin/jq -r --arg key "$identity" --arg url "$url" '
             ([select(.key == $key) | .results.items[] | select(.uid == $url)][0]) as $item
             | if $item == null then "Preview unavailable."
