@@ -65,8 +65,16 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")"
 export TZ=UTC alfred_workflow_cache="$HOME/Library/Caches/org.hubfred.screenshots"
 gh() {
-    [[ "$#" == 11 && "$1" == search && "$4 $5 $6 $7 $8 $9 ${10}" == '--state open --sort updated --limit 1000 --json' ]] || return 2
-    /usr/bin/jq -ce --arg kind "$2" --arg query "$3" '.[$kind][$query] // error("Unexpected screenshot query")' fixtures.json
+    local expected_limit
+    case "$mode" in
+        picker) expected_limit=10 ;;
+        dashboard) expected_limit=1000 ;;
+        *) return 2 ;;
+    esac
+    [[ "$#" == 11 && "$1" == search && "$4 $5 $6 $7 $8 $9 ${10}" == "--state open --sort updated --limit $expected_limit --json" ]] || return 2
+    /usr/bin/jq -ce --arg kind "$2" --arg query "$3" --argjson limit "$9" '
+        (.[$kind][$query] // error("Unexpected screenshot query"))[:$limit]
+    ' fixtures.json
 }
 source ./search-live.sh
 BASH
