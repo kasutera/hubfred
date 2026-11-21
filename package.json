@@ -2,7 +2,8 @@
   "name": "hubfred",
   "private": true,
   "scripts": {
-    "package": "bash scripts/package.sh"
+    "package": "bash scripts/package.sh",
+    "screenshots": "bash scripts/screenshots.sh"
   },
   "devDependencies": {
     "marked": "18.2.1"

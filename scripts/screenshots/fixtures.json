@@ -1,0 +1,31 @@
+{
+  "prs": {
+    "author:@me": [
+      {"title":"Add keyboard navigation to the command palette","number":128,"isDraft":true,"author":{"login":"demo-alex"},"repository":{"nameWithOwner":"demo-hub/atlas"},"updatedAt":"2026-10-14T15:42:00Z","url":"https://github.com/demo-hub/atlas/pull/128","body":"# Command palette shortcuts\n\nMake the command palette usable without a mouse. Arrow keys move the selection without interrupting the search.\n\n## Keyboard behavior\n\n| Key | Action |\n| --- | --- |\n| ↑ / ↓ | Move between results |\n| Enter | Run the selected command |\n| Escape | Return to the search field |\n\n- [x] Add keyboard navigation\n- [ ] Test with VoiceOver\n\n> [!NOTE]\n> Existing shortcuts are unchanged.\n"},
+      {"title":"Document local development setup","number":26,"isDraft":false,"author":{"login":"demo-alex"},"repository":{"nameWithOwner":"demo-hub/harbor"},"updatedAt":"2026-10-12T08:16:00Z","url":"https://github.com/demo-hub/harbor/pull/26"},
+      {"title":"Add an outage banner to the status page","number":123,"isDraft":false,"author":{"login":"demo-alex"},"repository":{"nameWithOwner":"demo-hub/atlas"},"updatedAt":"2026-10-11T09:20:00Z","url":"https://github.com/demo-hub/atlas/pull/123"},
+      {"title":"Add examples for workspace filters","number":19,"isDraft":false,"author":{"login":"demo-alex"},"repository":{"nameWithOwner":"demo-hub/harbor"},"updatedAt":"2026-10-08T15:23:00Z","url":"https://github.com/demo-hub/harbor/pull/19"},
+      {"title":"Simplify saved search settings","number":64,"isDraft":true,"author":{"login":"demo-alex"},"repository":{"nameWithOwner":"demo-hub/relay"},"updatedAt":"2026-10-07T10:05:00Z","url":"https://github.com/demo-hub/relay/pull/64"}
+    ],
+    "user-review-requested:@me": [
+      {"title":"Improve search relevance for short queries","number":74,"isDraft":false,"author":{"login":"demo-sam"},"repository":{"nameWithOwner":"demo-hub/relay"},"updatedAt":"2026-10-14T11:18:00Z","url":"https://github.com/demo-hub/relay/pull/74"},
+      {"title":"Cache repository metadata between requests","number":121,"isDraft":false,"author":{"login":"demo-jules"},"repository":{"nameWithOwner":"demo-hub/atlas"},"updatedAt":"2026-10-13T17:09:00Z","url":"https://github.com/demo-hub/atlas/pull/121"},
+      {"title":"Preserve search focus after closing a dialog","number":72,"isDraft":false,"author":{"login":"demo-sam"},"repository":{"nameWithOwner":"demo-hub/relay"},"updatedAt":"2026-10-10T14:35:00Z","url":"https://github.com/demo-hub/relay/pull/72"},
+      {"title":"Show retry guidance on connection errors","number":21,"isDraft":false,"author":{"login":"demo-jules"},"repository":{"nameWithOwner":"demo-hub/harbor"},"updatedAt":"2026-10-09T11:10:00Z","url":"https://github.com/demo-hub/harbor/pull/21"}
+    ]
+  },
+  "issues": {
+    "assignee:@me": [
+      {"title":"Improve keyboard navigation in saved views","number":42,"author":{"login":"demo-sam"},"repository":{"nameWithOwner":"demo-hub/atlas"},"updatedAt":"2026-10-14T16:05:00Z","url":"https://github.com/demo-hub/atlas/issues/42","labels":[{"name":"enhancement"},{"name":"accessibility"}],"body":"# Saved views\n\nMake saved views easier to use without a mouse. Keep keyboard hints visible and preserve the current selection when results refresh.\n\n## Acceptance criteria\n\n- [x] Add visible shortcut hints\n- [ ] Preserve selection on refresh\n- [ ] Verify keyboard focus in dark mode\n\n| Key | Action |\n| --- | --- |\n| ↑ / ↓ | Move selection |\n| Enter | Open saved view |\n\n> [!NOTE]\n> Existing shortcuts should keep working.\n"}
+    ],
+    "author:@me": [
+      {"title":"Explain how to restore archived projects","number":17,"author":{"login":"demo-alex"},"repository":{"nameWithOwner":"demo-hub/harbor"},"updatedAt":"2026-10-14T10:30:00Z","url":"https://github.com/demo-hub/harbor/issues/17","labels":[{"name":"documentation"}],"body":"Document how to restore an archived project from the settings page."}
+    ],
+    "mentions:@me": [
+      {"title":"Search results jump when filters are cleared","number":58,"author":{"login":"demo-jules"},"repository":{"nameWithOwner":"demo-hub/relay"},"updatedAt":"2026-10-13T18:17:00Z","url":"https://github.com/demo-hub/relay/issues/58","labels":[{"name":"bug"}],"body":"Keep the list anchored when clearing filters on a long result set."}
+    ],
+    "commenter:@me": [
+      {"title":"Show useful empty states for new workspaces","number":33,"author":{"login":"demo-sam"},"repository":{"nameWithOwner":"demo-hub/atlas"},"updatedAt":"2026-10-13T09:45:00Z","url":"https://github.com/demo-hub/atlas/issues/33","labels":[{"name":"design"}],"body":"Add short instructions for the first action in each empty state."}
+    ]
+  }
+}
