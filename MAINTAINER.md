@@ -23,7 +23,7 @@ open dist/Hubfred-Screenshots.alfredworkflow
 npm run screenshots
 ```
 
-Run `--prepare` and import the workflow only once. On subsequent runs, `npm run screenshots` updates the screenshot-only workflow and writes four PNGs to `docs/screenshots/`: simplified PR/Issue lists and dashboards. If Alfred settings are synced, set `HUBFRED_ALFRED_WORKFLOWS` to the synced `Alfred.alfredpreferences/workflows` directory.
+Run `--prepare` and import the workflow only once. On subsequent runs, `npm run screenshots` updates the screenshot-only workflow and writes four PNGs to `docs/screenshots/`: simplified PR/Issue lists and dashboards. Any PR that changes the workflow's appearance must rerun `npm run screenshots` and include the regenerated screenshots. If Alfred settings are synced, set `HUBFRED_ALFRED_WORKFLOWS` to the synced `Alfred.alfredpreferences/workflows` directory.
 
 Captures use synthetic data from `scripts/screenshots/fixtures.json` and a fixed UTC timestamp. The screenshot workflow uses a Bundle ID and cache separate from production and does not connect to GitHub CLI. Verify that the target window shows synthetic data, then save PNGs without shadows and with transparent corners outside the rounded window. Pixel-level results may vary by theme and OS. The screenshot workflow and data are excluded from release packages.
 
