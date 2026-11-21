@@ -41,6 +41,112 @@ const MAX_MARKDOWN_BYTES = 128 * 1024;
 const MAX_TABLE_COLUMNS = 128;
 const MAX_TABLE_CELLS = 8192;
 const MAX_HTML_BYTES = 512 * 1024;
+const HTML_PARSE_OPTIONS = $.NSXMLDocumentTidyHTML | $.NSXMLNodeLoadExternalEntitiesNever;
+const ELEMENT_NODE_KIND = Number($.NSXMLElementKind);
+const TEXT_NODE_KIND = Number($.NSXMLTextKind);
+const allowedElements = new Set([
+    'p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'strong', 'em', 'del', 'blockquote', 'ul', 'ol', 'li', 'pre', 'code',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'input', 'a'
+]);
+const removedContentElements = new Set([
+    'applet', 'base', 'canvas', 'embed', 'frame', 'frameset', 'head', 'iframe',
+    'math', 'meta', 'noembed', 'noframes', 'noscript', 'object', 'plaintext',
+    'script', 'style', 'svg', 'template', 'title', 'xmp'
+]);
+const alertClasses = new Set(['note', 'tip', 'important', 'warning', 'caution']);
+
+function attribute(node, name) {
+    const value = node.attributeForName(name);
+    return value.isNil() ? null : ObjC.unwrap(value.stringValue);
+}
+
+function resolvedHref(href, baseURL) {
+    if (baseURL === null || baseURL.isNil() || /[\x00-\x20\x7f\\]/.test(href)) return null;
+    const url = $.NSURL.URLWithStringRelativeToURL($.NSString.stringWithString(href), baseURL);
+    if (url.isNil()) return null;
+    const absolute = url.absoluteURL;
+    const scheme = ObjC.unwrap(absolute.scheme);
+    const host = ObjC.unwrap(absolute.host);
+    if (!scheme || !/^https?$/i.test(scheme) || !host) return null;
+    return ObjC.unwrap(absolute.absoluteString);
+}
+
+function serializeChildren(node, baseURL, inListItem) {
+    let result = '';
+    for (let i = 0; i < Number(node.childCount); i++) {
+        result += serializeNode(node.childAtIndex(i), baseURL, inListItem);
+    }
+    return result;
+}
+
+function serializeNode(node, baseURL, inListItem) {
+    const kind = Number(node.kind);
+    if (kind === TEXT_NODE_KIND) return escapeHtml(ObjC.unwrap(node.stringValue));
+    if (kind !== ELEMENT_NODE_KIND) return '';
+
+    const name = String(ObjC.unwrap(node.name)).toLowerCase();
+    if (removedContentElements.has(name)) return '';
+    const insideListItem = inListItem || name === 'li';
+    if (name === 'input') {
+        if (!inListItem || (attribute(node, 'type') || '').toLowerCase() !== 'checkbox') return '';
+        return `<input type="checkbox" disabled${attribute(node, 'checked') === null ? '' : ' checked'}>`;
+    }
+
+    const children = serializeChildren(node, baseURL, insideListItem);
+    if (!allowedElements.has(name)) return children;
+    if (name === 'br' || name === 'hr') return `<${name}>`;
+
+    let attributes = '';
+    if (name === 'ol') {
+        const start = attribute(node, 'start');
+        if (start !== null && /^-?\d+$/.test(start)) {
+            attributes += ` start="${escapeHtml(start)}"`;
+        }
+    } else if (name === 'th' || name === 'td') {
+        const align = (attribute(node, 'align') || '').toLowerCase();
+        if (align === 'left' || align === 'center' || align === 'right') {
+            attributes += ` align="${escapeHtml(align)}"`;
+        }
+    } else if (name === 'div') {
+        const className = (attribute(node, 'class') || '').toLowerCase();
+        if (alertClasses.has(className)) attributes += ` class="${escapeHtml(className)}"`;
+    } else if (name === 'a') {
+        const href = attribute(node, 'href');
+        const safe = href === null ? null : resolvedHref(href, baseURL);
+        if (safe === null) return children;
+        attributes += ` href="${escapeHtml(safe)}"`;
+    }
+    return `<${name}${attributes}>${children}</${name}>`;
+}
+
+function sanitizeHtml(html, itemURL) {
+    let baseURL = null;
+    if (typeof itemURL === 'string' &&
+        /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:pull|issues)\/[0-9]+$/.test(itemURL)) {
+        const candidate = $.NSURL.URLWithString(itemURL);
+        if (!candidate.isNil()) baseURL = candidate;
+    }
+
+    const source = `<!doctype html><html><head></head><body>${html}</body></html>`;
+    const data = $.NSString.stringWithString(source).dataUsingEncoding($.NSUTF8StringEncoding);
+    const document = $.NSXMLDocument.alloc.initWithDataOptionsError(data, HTML_PARSE_OPTIONS, null);
+    if (document.isNil()) throw new Error('Markdown HTML could not be parsed');
+    const root = document.rootElement;
+    if (root.isNil()) throw new Error('Markdown HTML could not be parsed');
+
+    let body = null;
+    for (let i = 0; i < Number(root.childCount); i++) {
+        const child = root.childAtIndex(i);
+        if (Number(child.kind) === ELEMENT_NODE_KIND && String(ObjC.unwrap(child.name)).toLowerCase() === 'body') {
+            body = child;
+            break;
+        }
+    }
+    if (body === null) throw new Error('Markdown HTML body could not be parsed');
+    return serializeChildren(body, baseURL, false);
+}
+
 
 function readMarkdown() {
     const handle = $.NSFileHandle.fileHandleWithStandardInput;
@@ -102,7 +208,7 @@ function checkTableLimits(tokenizer, source, state) {
 const inputError = 'Markdown input too large';
 const outputError = 'Markdown output too large';
 
-function run([libraryPath]) {
+function run([libraryPath, itemURL]) {
     const library = ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(
         libraryPath, $.NSUTF8StringEncoding, null));
     const module = {exports: {}};
