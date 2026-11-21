@@ -61,7 +61,7 @@ if ((failed)); then
     exit 0
 fi
 
-icon_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.github-prs}/octicons-v1"
+icon_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.github-prs}/octicons-v2"
 /bin/mkdir -p "$icon_dir"
 
 # Both states use the repository's color; the branch shape carries the state.
@@ -78,7 +78,7 @@ for i in "${!colors[@]}"; do
         [[ -s "$icon.png" ]] && continue
         pending+=("$icon.svg")
         /usr/bin/sed -e 's/width="16" height="16"/width="64" height="64"/' \
-            -e "s/<path /<path fill=\"#${colors[$i]}\" /" "octicons/$asset" > "$icon.svg"
+            -e "s/<svg /<svg fill=\"#${colors[$i]}\" /" "octicons/$asset" > "$icon.svg"
     done
 done
 if [[ -n "${pending[0]:-}" ]]; then

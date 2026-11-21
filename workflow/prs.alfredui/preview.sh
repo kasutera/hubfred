@@ -3,16 +3,15 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")"
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-source ./cache.sh
 url="${1:-}"
 if [[ ! "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(pull|issues)/[0-9]+$ ]]; then
-    url=
+    printf '%s\n' '{"update":{"ids":{"preview":{"text":"<!doctype html><html><body></body></html>"}}}}'
+    exit 0
 fi
+source ./cache.sh
 
 read_body() {
-    if [[ -z "$url" ]]; then
-        printf 'Select an item to preview it.'
-    elif [[ -r "$cache" ]]; then
+    if [[ -r "$cache" ]]; then
         /usr/bin/jq -r --arg key "$identity" --arg url "$url" '
             ([select(.key == $key) | .results.items[] | select(.uid == $url)][0]) as $item
             | if $item == null then "Preview unavailable."

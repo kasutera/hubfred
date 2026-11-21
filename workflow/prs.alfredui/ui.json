@@ -78,7 +78,7 @@
         },
         {
           "id": "preview", "type": "webkitview", "constraints": {"region": "centre"},
-          "text": "<p>Select an item to preview it.</p>", "openlinksexternally": true
+          "text": "<!doctype html><html><body></body></html>", "openlinksexternally": true
         }
       ]
     }

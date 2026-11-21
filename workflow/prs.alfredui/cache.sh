@@ -1,7 +1,7 @@
 # Shared by the dashboard loader and preview.
 case "${dashboard_kind:-prs}" in
-    prs) cache_name=dashboard-v1.json ;;
-    issues) cache_name=issues-dashboard-v1.json ;;
+    prs) cache_name=dashboard-v2.json ;;
+    issues) cache_name=issues-dashboard-v2.json ;;
     *) exit 2 ;;
 esac
 cache_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.github-prs}"
