@@ -33,10 +33,12 @@ During capture, installed production workflows under the current or legacy Bundl
 
 ## Runtime Behavior
 
-- `pr` and `is` use Alfred's cache. Reopening them more than 30 seconds after the previous fetch triggers a background refresh. To clear the cache after switching GitHub CLI accounts, run `reload` in Alfred.
-- `prs` and `iss` store the list and body separately on disk. For up to 30 seconds, they do not fetch again; from 30 seconds to under 10 minutes, they show the previous list while refreshing in the background. A failed refresh leaves the old list intact. On the first load, after 10 minutes, or after authentication settings change, they wait for GitHub's response. Ten minutes is the display freshness window, not a deletion deadline.
-- Searches run in parallel for each participation category, and results are sorted by update time. GitHub Search is limited to 1,000 results per search query. Icons use [Octicons v19.19.0](https://github.com/primer/octicons/tree/v19.19.0/icons); PR readiness and Draft remain distinct Octicon shapes. Each glyph is scaled to 87.5% within its 64px PNG canvas. Six muted, distinct-hue colors identify repositories only; green is intentionally excluded to avoid GitHub state colors. Update times are shown in the Mac's local time.
-- The bundled [Marked](https://github.com/markedjs/marked) converts GFM to HTML for display in WebKit. Raw HTML and images are not rendered; images can be opened as links. If the conversion process times out after 2 seconds, the item can still be opened on GitHub.
+- Searches run in parallel for each participation category. The `pr` and `is` pickers fetch up to 10 results per category, then combine and deduplicate them to show the 10 most recently updated items. The `prs` and `iss` dashboards fetch up to 1,000 results per category (the GitHub Search limit per query), then combine and deduplicate them in update-time order. Update times are shown in the Mac's local time.
+- The bundled [Marked](https://github.com/markedjs/marked) converts GFM for display in WebKit. Marked's output is reconstructed from allowed elements, attributes, and URLs; arbitrary raw HTML is not passed through, and images are shown as links instead of loaded inline. Conversion allows up to 128 KiB of UTF-8 input on stdin, 128 columns per GFM table, 8,192 table cells across the document (including headers and cells added to fill short rows), and 512 KiB of UTF-8 HTML output. If conversion exceeds any of these limits or times out after 2 seconds, the preview directs readers to open the item on GitHub.
+
+## Cache Strategy
+
+For current cache behavior and the recommended direction, see [Cache Strategy](docs/cache-strategy.md).
 
 ## CI and Releases
 
