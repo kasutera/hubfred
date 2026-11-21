@@ -4,7 +4,7 @@ case "${dashboard_kind:-prs}" in
     issues) cache_name=issues-dashboard-v2.json ;;
     *) exit 2 ;;
 esac
-cache_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.github-prs}"
+cache_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.hubfred}"
 cache="$cache_dir/$cache_name"
 
 # Key by CLI credentials without sending a request or retaining the credentials.

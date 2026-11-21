@@ -1,10 +1,12 @@
-# Hubfred
+# hubfred
 
 Find and open the GitHub pull requests and issues that involve you, right from Alfred.
 
 ## Install
 
-[Download Hubfred.alfredworkflow](../../releases/latest/download/Hubfred.alfredworkflow) and open it in Alfred. Requires Alfred 6 with Powerpack and [GitHub CLI](https://cli.github.com/) signed in to github.com.
+[Download the latest release](../../releases/latest) and open the `.alfredworkflow` file in Alfred. Requires Alfred 6 with Powerpack and [GitHub CLI](https://cli.github.com/) signed in to github.com.
+
+If upgrading, disable the previously installed workflow before importing this version. Its new bundle ID may make Alfred install it separately; the previous workflow is not automatically removed or migrated.
 
 ## Pull Requests
 
@@ -26,6 +28,7 @@ Find and open the GitHub pull requests and issues that involve you, right from A
 
 ![The Issue dashboard showing a labeled list and a Markdown description with a checklist.](docs/screenshots/dashboard.png)
 
+The `pr` and `is` pickers show up to 10 items, most recently updated first; typing a search filters that list. The `prs` and `iss` dashboards are not capped.
 Search by title, repository, or number. Press Enter to open the selected item on GitHub.
 
 See [MAINTAINER.md](MAINTAINER.md) for development, screenshots, and releases.

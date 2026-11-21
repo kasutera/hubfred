@@ -37,6 +37,6 @@ vendor="$payload/prs.alfredui/vendor/marked"
 mkdir -p "$vendor"
 cp node_modules/marked/lib/marked.umd.js node_modules/marked/LICENSE "$vendor/"
 
-(cd "$payload" && zip -q -X -r "$stage/Hubfred.alfredworkflow" .)
-mv -f "$stage/Hubfred.alfredworkflow" dist/Hubfred.alfredworkflow
-printf 'Built %s\n' dist/Hubfred.alfredworkflow
+(cd "$payload" && zip -q -X -r "$stage/hubfred.alfredworkflow" .)
+mv -f "$stage/hubfred.alfredworkflow" dist/hubfred.alfredworkflow
+printf 'Built %s\n' dist/hubfred.alfredworkflow

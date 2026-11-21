@@ -1,4 +1,4 @@
-name: Package Hubfred
+name: Package hubfred
 
 on:
   pull_request:
@@ -29,7 +29,7 @@ jobs:
           import plistlib
           from zipfile import ZipFile
 
-          with ZipFile('dist/Hubfred.alfredworkflow') as package:
+          with ZipFile('dist/hubfred.alfredworkflow') as package:
               version = plistlib.loads(package.read('info.plist'))['version']
           tag = os.environ['GITHUB_REF_NAME']
           if tag != f'v{version}':
@@ -37,8 +37,8 @@ jobs:
           PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: Hubfred.alfredworkflow
-          path: dist/Hubfred.alfredworkflow
+          name: hubfred.alfredworkflow
+          path: dist/hubfred.alfredworkflow
           if-no-files-found: error
 
   release:
@@ -50,9 +50,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: Hubfred.alfredworkflow
+          name: hubfred.alfredworkflow
       - name: Publish the tagged release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" Hubfred.alfredworkflow --verify-tag --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" hubfred.alfredworkflow --verify-tag --generate-notes

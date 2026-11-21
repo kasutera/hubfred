@@ -61,11 +61,11 @@ if ((failed)); then
     exit 0
 fi
 
-icon_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.github-prs}/octicons-v2"
+icon_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.hubfred}/octicons-v5"
 /bin/mkdir -p "$icon_dir"
 
-# Both states use the repository's color; the branch shape carries the state.
-colors=(448C70 397AB8 8D64B8 B26835 BF5378 33868E 687FB5 A34F44 7D853C A25BAD 537E4C 8C715A)
+# Color identifies the repository; Octicon shape identifies item kind and PR Draft state.
+colors=(AC6B49 4269A5 A48332 B15F91 4E94B8 62636D)
 pending=()
 for i in "${!colors[@]}"; do
     for state in "${states[@]}"; do
@@ -78,6 +78,7 @@ for i in "${!colors[@]}"; do
         [[ -s "$icon.png" ]] && continue
         pending+=("$icon.svg")
         /usr/bin/sed -e 's/width="16" height="16"/width="64" height="64"/' \
+            -e 's/viewBox="0 0 16 16"/viewBox="-1.142857 -1.142857 18.285714 18.285714"/' \
             -e "s/<svg /<svg fill=\"#${colors[$i]}\" /" "octicons/$asset" > "$icon.svg"
     done
 done
@@ -100,6 +101,7 @@ fi
     | group_by(.url)
     | map(.[0] + {reasons: (map(.reason) | unique)})
     | sort_by(.updatedAt) | reverse
+    | (if $mode == "picker" then .[:10] else . end)
     | {items: map(.repository.nameWithOwner as $repo
         | (if $kind == "issues" then "issue" elif .isDraft then "draft" else "ready" end) as $state
         | {title,

@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>bundleid</key><string>jp.kasutera.github-prs</string>
-    <key>name</key><string>My GitHub PRs and Issues</string>
-    <key>description</key><string>Browse open PRs and issues that involve you.</string>
+    <key>bundleid</key><string>jp.kasutera.hubfred</string>
+    <key>name</key><string>hubfred</string>
+    <key>description</key><string>Find and open the GitHub pull requests and issues that involve you, right from Alfred.</string>
     <key>version</key><string>1.1</string>
     <key>readme</key><string>pr and is: quick pickers. prs and iss: dashboards.</string>
     <key>connections</key>
@@ -71,7 +71,7 @@
                 <key>argumenttype</key><integer>1</integer>
                 <key>alfredfiltersresults</key><true/>
                 <key>alfredfiltersresultsmatchmode</key><integer>0</integer>
-                <key>title</key><string>My GitHub Pull Requests</string>
+                <key>title</key><string>hubfred: Pull Requests</string>
                 <key>subtext</key><string>PRs you authored or were asked to review</string>
                 <key>runningsubtext</key><string>Searching GitHub…</string>
                 <key>script</key><string>/bin/bash search.sh picker prs</string>
@@ -97,7 +97,7 @@
                 <key>keyword</key><string>prs</string>
                 <key>argumenttype</key><integer>2</integer>
                 <key>withspace</key><false/>
-                <key>text</key><string>GitHub PR Dashboard</string>
+                <key>text</key><string>hubfred: PR Dashboard</string>
                 <key>subtext</key><string>Browse your open PRs and preview their descriptions</string>
             </dict>
         </dict>
@@ -123,7 +123,7 @@
                 <key>argumenttype</key><integer>1</integer>
                 <key>alfredfiltersresults</key><true/>
                 <key>alfredfiltersresultsmatchmode</key><integer>0</integer>
-                <key>title</key><string>My GitHub Issues</string>
+                <key>title</key><string>hubfred: Issues</string>
                 <key>subtext</key><string>Open issues you are involved in</string>
                 <key>runningsubtext</key><string>Searching GitHub…</string>
                 <key>script</key><string>/bin/bash search.sh picker issues</string>
@@ -140,7 +140,7 @@
                 <key>keyword</key><string>iss</string>
                 <key>argumenttype</key><integer>2</integer>
                 <key>withspace</key><false/>
-                <key>text</key><string>GitHub Issue Dashboard</string>
+                <key>text</key><string>hubfred: Issue Dashboard</string>
                 <key>subtext</key><string>Browse your open issues and preview their descriptions</string>
             </dict>
         </dict>
