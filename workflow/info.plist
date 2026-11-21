@@ -6,7 +6,7 @@
     <key>createdby</key><string>kasutera</string>
     <key>name</key><string>hubfred</string>
     <key>description</key><string>Find and open the GitHub pull requests and issues that involve you, right from Alfred.</string>
-    <key>version</key><string>1.1</string>
+    <key>version</key><string>1.2.0</string>
     <key>readme</key><string>pr and is: quick pickers. prs and iss: dashboards.</string>
     <key>connections</key>
     <dict>
