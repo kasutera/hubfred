@@ -6,11 +6,14 @@ The workflow requires macOS 15 or later to run. The package can also be built on
 
 ```bash
 npm ci --ignore-scripts
+npm test
 npm run package
 open dist/hubfred.alfredworkflow
 ```
 
 `npm run package` reads files under `workflow/` from the working tree for files tracked in the Git index, so it includes uncommitted changes to existing files. Newly added files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution.
+
+On macOS 15 or later, `npm test` exercises search formatting, dashboard refresh decisions, and the production JXA Markdown renderer with the locked Marked library. The tests use synthetic GitHub CLI responses and do not require GitHub credentials or Alfred.
 
 ## README Screenshots
 
