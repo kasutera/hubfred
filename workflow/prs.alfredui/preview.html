@@ -18,12 +18,11 @@ blockquote { border-left:4px solid var(--border); padding:0 1em; color:var(--mut
 code { font: .875em ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--subtle); border-radius:6px; padding:.2em .4em; }
 pre { overflow:auto; background:var(--subtle); border-radius:6px; padding:14px; }
 pre code { padding:0; background:none; }
-code .kw { color:var(--caution); } code .st,code .dv { color:var(--link); } code .co { color:var(--muted); }
 table { display:block; width:max-content; max-width:100%; overflow:auto; border-collapse:collapse; }
 th,td { border:1px solid var(--border); padding:6px 12px; }
 tr:nth-child(even) { background:var(--subtle); }
-.task-list, li:has(> label > input[type=checkbox]) { list-style:none; }
-.task-list input { margin:0 .45em 0 -1.4em; pointer-events:none; }
+li:has(> input[type=checkbox]:first-child), li:has(> p:first-child > input[type=checkbox]:first-child) { list-style:none; }
+li input[type=checkbox] { margin:0 .45em 0 -1.4em; pointer-events:none; }
 .note,.tip,.important,.warning,.caution { border-left:4px solid var(--note); padding:.2em 1em; margin-bottom:16px; }
 .tip { border-color:var(--tip); } .important { border-color:var(--important); } .warning { border-color:var(--warning); } .caution { border-color:var(--caution); }
 </style>

@@ -7,8 +7,9 @@ Alfred で `pr` に続けてスペースを入力すると、GitHub CLI でロ�
 
 `is` に続けてスペースを入力すると Issue の簡易一覧、`iss` → Enter で Issue の専用画面を開く。アクセスできる全リポジトリから、自分に割り当てられた・自分が作成した・自分がメンションされた・自分がコメントした Open Issue を、重複を除いて更新日時順に表示する。専用画面では関わり方を切り替えられ、左の一覧にラベル、右に Markdown の本文を表示する。ラベルも検索欄で絞り込める。
 
-- 本文は Pandoc の GitHub Flavored Markdown（GFM）で変換し、WebKit で表示する。表・タスクリスト・コードブロックなどに対応。生 HTML は描画せず、画像は自動取得しない。Markdown の画像や GitHub の添付画像はリンクからブラウザで開ける。非公開の添付画像には、ブラウザでの GitHub ログインが必要。
+- 本文は同梱の [Marked](https://github.com/markedjs/marked) で GitHub Flavored Markdown（GFM）から HTML に変換し、WebKit で表示する。表・タスクリスト・コードブロックなどに対応。生 HTML は描画せず、画像は自動取得しない。Markdown の画像や GitHub の添付画像はリンクからブラウザで開ける。非公開の添付画像には、ブラウザでの GitHub ログインが必要。
 - `prs` と `iss` は一覧と本文を別々にローカル保存する。取得後30秒未満は通信せず、30秒〜10分は前回の一覧を先に表示して裏で更新する。更新に失敗しても表示済みの一覧は保持する。初回・10分経過後・認証設定変更後は GitHub の応答を待つ。
+- Markdown の変換は項目ごとに最長2秒。超過時は変換プロセスを終了し、右ペインにエラーを表示する。選択中の項目は引き続き GitHub で開ける。
 
 - 自分が作成した PR（Draft を含む）と、自分個人に現在レビュー依頼が来ている PR が対象。チーム経由の依頼は含めない。
 - アクセスできるリポジトリを横断し、更新日時の新しい順に表示する。GitHub Search の上限は条件ごとに 1,000 件。
@@ -18,11 +19,22 @@ Alfred で `pr` に続けてスペースを入力すると、GitHub CLI でロ�
 
 ## インストール
 
-専用画面には Alfred 6 と Pandoc（`brew install pandoc`）、すべての入口に Powerpack と github.com にログイン済みの GitHub CLI (`gh`) が必要。Alfred の既定の設定保存先を使用している場合は、このリポジトリのルートで以下を実行する。設定を同期している場合は、`dest` の `Alfred.alfredpreferences` のパスを同期先に合わせる。
+GitHub Releases から `Hubfred.alfredworkflow` をダウンロードし、開いて Alfred にインポートする。専用画面には Alfred 6、すべての入口に Powerpack と github.com にログイン済みの GitHub CLI (`gh`) が必要。利用者は Node.js や npm をインストールする必要はない。
+
+## ローカル開発
+
+リポジトリのルートで Node.js 24、npm、`zip` を使ってビルドする。`npm ci` は初回とロックファイルが変わったときに実行する。
 
 ```bash
-dest="$HOME/Library/Application Support/Alfred/Alfred.alfredpreferences/workflows/user.workflow.0465F0DE-9C05-4575-92F2-3454A56B8536"
-ditto workflow "$dest"
+npm ci --ignore-scripts
+npm run package
+open dist/Hubfred.alfredworkflow
 ```
 
-Alfred に反映されない場合は、Alfred を再起動する。更新時も同じ手順でコピーする。
+`npm run package` は Git インデックスにある `workflow/` のファイルを作業ツリーから読み取るため、既存ファイルの未コミット変更も含む。追加したファイルは先に Git の追跡対象にする。Marked の JavaScript とライセンスはロック済み npm 配布物からパッケージにだけ同梱する。
+
+## CI とリリース
+
+Dependabot の PR と `main` への push で `.alfredworkflow` を生成し、Actions の成果物としてダウンロードできる。同梱ファイルを手で更新する必要はない。
+
+正式版は `workflow/info.plist` の `version` を更新してから、同じバージョンの `v` 付きタグを push すると GitHub Releases に公開される。タグとワークフローのバージョンが一致しない場合は公開しない。配布物には本体・Octicons・Marked のライセンスを含める。

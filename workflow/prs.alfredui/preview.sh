@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 cd -- "$(dirname -- "$0")"
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 url="${1:-}"
 if [[ ! "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(pull|issues)/[0-9]+$ ]]; then
@@ -23,15 +22,18 @@ read_body() {
     fi
 }
 
-render_body() {
-    if command -v pandoc >/dev/null; then
-        pandoc -f gfm-raw_html -t html5 --lua-filter=preview.lua
-    else
-        /usr/bin/jq -Rs '"<p>Install Pandoc to render GitHub Markdown.</p><p style=\"white-space:pre-wrap\">\(. | @html)</p>"' -r
-    fi
-}
+# The POSIX alarm survives exec and bounds osascript without a watchdog process.
+if html=$(read_body | /usr/bin/perl -e 'alarm shift; exec @ARGV or die $!' 2 \
+    /usr/bin/osascript -l JavaScript render-markdown.js "$PWD/vendor/marked/marked.umd.js"); then
+    :
+else
+    case "$?" in
+        142) html='<p>Preview timed out. Open the item on GitHub to read its description.</p>' ;;
+        *) html='<p>Preview unavailable. Open the item on GitHub to read its description.</p>' ;;
+    esac
+fi
 
-read_body | render_body | /usr/bin/jq -Rs --arg url "${url:-https://github.com/}" --rawfile page preview.html '
+printf '%s' "$html" | /usr/bin/jq -Rs --arg url "$url" --rawfile page preview.html '
     {update: {ids: {
         preview: {text: ($page + "<base href=\"" + $url + "\">" + .)}
     }}}
