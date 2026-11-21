@@ -1,0 +1,86 @@
+{
+  "variablesconfig": {
+    "dashboard_kind": {"default": "prs", "src": "variable", "scriptenv": true}
+  },
+  "window": {
+    "size": {"width": 1160, "height": 690},
+    "blur": false,
+    "root": {
+      "type": "view",
+      "layout": "border",
+      "background": "textBackgroundColor",
+      "cornerradius": 12,
+      "padding": 14,
+      "spacing": 12,
+      "events": [
+        {"triggers": "preload", "action": {"type": "script", "src": "load.sh", "args": ["cached"]}},
+        {"triggers": "launched", "action": {"type": "script", "src": "load.sh", "args": ["refresh"], "async": true}}
+      ],
+      "shortcuts": [
+        {"shortcut": "↑", "action": {"type": "function", "src": "prs", "args": "selectup"}},
+        {"shortcut": "↓", "action": {"type": "function", "src": "prs", "args": "selectdown"}}
+      ],
+      "components": [
+        {
+          "type": "view", "layout": "border", "spacing": 8,
+          "constraints": {"region": "top"},
+          "components": [
+            {
+              "id": "category", "type": "picker", "constraints": {"region": "left", "size": {"width": 165}},
+              "items": [{"text": "All", "value": "allitems"}],
+              "events": [{"triggers": "changed", "action": {"type": "function", "src": "prs", "args": "filterdata"}}]
+            },
+            {
+              "id": "query", "type": "textfield", "constraints": {"region": "centre"},
+              "placeholder": "Filter by title, repository, or number", "focus": true,
+              "events": [
+                {"triggers": "changed", "action": {"type": "function", "src": "prs", "args": "filterdata"}},
+                {"triggers": "actioned", "action": {"type": "script", "src": "open.sh", "args": ["{value:prs.selected.uid}"]}}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "prs", "type": "dataview", "constraints": {"region": "left", "size": {"width": 540}},
+          "placeholder": "Searching GitHub…", "spacing": 2,
+          "data": {
+            "type": "basic", "src": [],
+            "filter": {"type": "basic", "args": "match", "match": "{value:category.selected.value} {value:query.text}", "matchmode": "wordmatchanyorder"}
+          },
+          "cell": {
+            "height": 54,
+            "init": {"row.background": null, "title.colour": "labelColor", "subtitle.colour": "secondaryLabelColor"},
+            "selected": {"row.background": "alfredSelectedResultBackgroundColor", "title.colour": "alfredSelectedResultTextColor", "subtitle.colour": "alfredSelectedResultTextColor"},
+            "root": {
+              "id": "row", "type": "view", "layout": "border", "padding": 7, "spacing": 8, "cornerradius": 6,
+              "components": [
+                {"id": "glyph", "type": "imageview", "constraints": {"region": "left", "size": {"width": 23}}},
+                {
+                  "type": "view", "layout": "inline", "direction": "vertical", "spacing": 3,
+                  "constraints": {"region": "centre"},
+                  "components": [
+                    {"id": "title", "type": "label", "font": {"weight": "semibold"}},
+                    {"id": "subtitle", "type": "label", "font": {"size": "small"}}
+                  ]
+                }
+              ]
+            }
+          },
+          "events": [
+            {
+              "triggers": "changed",
+              "action": {
+                "type": "script", "src": "preview.sh", "args": ["{value:prs.selected}"]
+              }
+            },
+            {"triggers": ["actioned", "doubleclicked"], "action": {"type": "script", "src": "open.sh", "args": ["{value:prs.selected.uid}"]}}
+          ]
+        },
+        {
+          "id": "preview", "type": "webkitview", "constraints": {"region": "centre"},
+          "text": "<p>Select an item to preview it.</p>", "openlinksexternally": true
+        }
+      ]
+    }
+  }
+}

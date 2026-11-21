@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>bundleid</key><string>jp.kasutera.github-prs</string>
+    <key>name</key><string>My GitHub PRs and Issues</string>
+    <key>description</key><string>Browse open PRs and issues that involve you.</string>
+    <key>version</key><string>1.1</string>
+    <key>readme</key><string>pr and is: quick pickers. prs and iss: dashboards.</string>
+    <key>connections</key>
+    <dict>
+        <key>BB91867A-9476-4C32-9EED-C7C4471F3FC1</key>
+        <array>
+            <dict>
+                <key>destinationuid</key><string>82C1537C-A460-4397-A1C2-A74BAD3B3637</string>
+                <key>modifiers</key><integer>0</integer>
+                <key>vitoclose</key><false/>
+            </dict>
+        </array>
+        <key>74538B07-A95B-4A03-AA9C-1FA6C1AA0C4F</key>
+        <array>
+            <dict>
+                <key>destinationuid</key><string>9B84FA40-BCE3-455D-A228-65958B36961F</string>
+                <key>modifiers</key><integer>0</integer>
+                <key>vitoclose</key><false/>
+            </dict>
+        </array>
+        <key>9B84FA40-BCE3-455D-A228-65958B36961F</key>
+        <array>
+            <dict>
+                <key>destinationuid</key><string>82C1537C-A460-4397-A1C2-A74BAD3B3637</string>
+                <key>modifiers</key><integer>0</integer>
+                <key>vitoclose</key><false/>
+            </dict>
+        </array>
+        <key>AC91C240-4AA3-4D57-A620-56F06EB542D2</key>
+        <array>
+            <dict>
+                <key>destinationuid</key><string>82C1537C-A460-4397-A1C2-A74BAD3B3637</string>
+                <key>modifiers</key><integer>0</integer>
+                <key>vitoclose</key><false/>
+            </dict>
+        </array>
+        <key>2CB7B649-FEBB-474B-A57D-E302FFC970BA</key>
+        <array>
+            <dict>
+                <key>destinationuid</key><string>45B5211F-E55F-4E55-84B3-2D813502CECF</string>
+                <key>modifiers</key><integer>0</integer>
+                <key>vitoclose</key><false/>
+            </dict>
+        </array>
+        <key>45B5211F-E55F-4E55-84B3-2D813502CECF</key>
+        <array>
+            <dict>
+                <key>destinationuid</key><string>9B84FA40-BCE3-455D-A228-65958B36961F</string>
+                <key>modifiers</key><integer>0</integer>
+                <key>vitoclose</key><false/>
+            </dict>
+        </array>
+    </dict>
+    <key>objects</key>
+    <array>
+        <dict>
+            <key>uid</key><string>BB91867A-9476-4C32-9EED-C7C4471F3FC1</string>
+            <key>type</key><string>alfred.workflow.input.scriptfilter</string>
+            <key>version</key><integer>3</integer>
+            <key>config</key>
+            <dict>
+                <key>keyword</key><string>pr</string>
+                <key>withspace</key><true/>
+                <key>argumenttype</key><integer>1</integer>
+                <key>alfredfiltersresults</key><true/>
+                <key>alfredfiltersresultsmatchmode</key><integer>0</integer>
+                <key>title</key><string>My GitHub Pull Requests</string>
+                <key>subtext</key><string>PRs you authored or were asked to review</string>
+                <key>runningsubtext</key><string>Searching GitHub…</string>
+                <key>script</key><string>/bin/bash search.sh picker prs</string>
+                <key>scriptargtype</key><integer>1</integer>
+                <key>type</key><integer>0</integer>
+            </dict>
+        </dict>
+        <dict>
+            <key>uid</key><string>82C1537C-A460-4397-A1C2-A74BAD3B3637</string>
+            <key>type</key><string>alfred.workflow.action.openurl</string>
+            <key>version</key><integer>1</integer>
+            <key>config</key>
+            <dict>
+                <key>url</key><string></string>
+            </dict>
+        </dict>
+        <dict>
+            <key>uid</key><string>74538B07-A95B-4A03-AA9C-1FA6C1AA0C4F</string>
+            <key>type</key><string>alfred.workflow.input.keyword</string>
+            <key>version</key><integer>1</integer>
+            <key>config</key>
+            <dict>
+                <key>keyword</key><string>prs</string>
+                <key>argumenttype</key><integer>2</integer>
+                <key>withspace</key><false/>
+                <key>text</key><string>GitHub PR Dashboard</string>
+                <key>subtext</key><string>Browse your open PRs and preview their descriptions</string>
+            </dict>
+        </dict>
+        <dict>
+            <key>uid</key><string>9B84FA40-BCE3-455D-A228-65958B36961F</string>
+            <key>type</key><string>alfred.workflow.userinterface.alfredui</string>
+            <key>version</key><integer>1</integer>
+            <key>config</key>
+            <dict>
+                <key>path</key><string>prs.alfredui</string>
+                <key>stackview</key><false/>
+                <key>launchmode</key><integer>0</integer>
+            </dict>
+        </dict>
+        <dict>
+            <key>uid</key><string>AC91C240-4AA3-4D57-A620-56F06EB542D2</string>
+            <key>type</key><string>alfred.workflow.input.scriptfilter</string>
+            <key>version</key><integer>3</integer>
+            <key>config</key>
+            <dict>
+                <key>keyword</key><string>is</string>
+                <key>withspace</key><true/>
+                <key>argumenttype</key><integer>1</integer>
+                <key>alfredfiltersresults</key><true/>
+                <key>alfredfiltersresultsmatchmode</key><integer>0</integer>
+                <key>title</key><string>My GitHub Issues</string>
+                <key>subtext</key><string>Open issues you are involved in</string>
+                <key>runningsubtext</key><string>Searching GitHub…</string>
+                <key>script</key><string>/bin/bash search.sh picker issues</string>
+                <key>scriptargtype</key><integer>1</integer>
+                <key>type</key><integer>0</integer>
+            </dict>
+        </dict>
+        <dict>
+            <key>uid</key><string>2CB7B649-FEBB-474B-A57D-E302FFC970BA</string>
+            <key>type</key><string>alfred.workflow.input.keyword</string>
+            <key>version</key><integer>1</integer>
+            <key>config</key>
+            <dict>
+                <key>keyword</key><string>iss</string>
+                <key>argumenttype</key><integer>2</integer>
+                <key>withspace</key><false/>
+                <key>text</key><string>GitHub Issue Dashboard</string>
+                <key>subtext</key><string>Browse your open issues and preview their descriptions</string>
+            </dict>
+        </dict>
+        <dict>
+            <key>uid</key><string>45B5211F-E55F-4E55-84B3-2D813502CECF</string>
+            <key>type</key><string>alfred.workflow.utility.argument</string>
+            <key>version</key><integer>1</integer>
+            <key>config</key>
+            <dict>
+                <key>passthroughargument</key><true/>
+                <key>variables</key>
+                <dict><key>dashboard_kind</key><string>issues</string></dict>
+            </dict>
+        </dict>
+    </array>
+    <key>uidata</key>
+    <dict>
+        <key>BB91867A-9476-4C32-9EED-C7C4471F3FC1</key>
+        <dict><key>xpos</key><integer>40</integer><key>ypos</key><integer>40</integer></dict>
+        <key>82C1537C-A460-4397-A1C2-A74BAD3B3637</key>
+        <dict><key>xpos</key><integer>300</integer><key>ypos</key><integer>40</integer></dict>
+        <key>74538B07-A95B-4A03-AA9C-1FA6C1AA0C4F</key>
+        <dict><key>xpos</key><integer>40</integer><key>ypos</key><integer>180</integer></dict>
+        <key>9B84FA40-BCE3-455D-A228-65958B36961F</key>
+        <dict><key>xpos</key><integer>170</integer><key>ypos</key><integer>180</integer></dict>
+        <key>AC91C240-4AA3-4D57-A620-56F06EB542D2</key>
+        <dict><key>xpos</key><integer>40</integer><key>ypos</key><integer>100</integer></dict>
+        <key>2CB7B649-FEBB-474B-A57D-E302FFC970BA</key>
+        <dict><key>xpos</key><integer>40</integer><key>ypos</key><integer>260</integer></dict>
+        <key>45B5211F-E55F-4E55-84B3-2D813502CECF</key>
+        <dict><key>xpos</key><integer>170</integer><key>ypos</key><integer>260</integer></dict>
+    </dict>
+</dict>
+</plist>
