@@ -12,6 +12,7 @@ node -e '
     console.error("Run npm ci --ignore-scripts to install the locked version of Marked.");
     process.exit(1);
 '
+npm run typecheck
 
 mkdir -p dist
 stage=$(mktemp -d "$PWD/dist/.package.XXXXXX")
@@ -21,6 +22,7 @@ mkdir "$payload"
 
 # Use worktree contents of indexed files, never local caches or Finder metadata.
 git ls-files -z -- workflow/ ':(exclude)workflow/prs.alfredui/vendor/marked/**' \
+    ':(exclude)workflow/prs.alfredui/render-markdown.js' \
     | while IFS= read -r -d '' source; do
         if [[ ! -f "$source" || -L "$source" ]]; then
             printf 'Expected a regular workflow source: %s\n' "$source" >&2
@@ -32,6 +34,11 @@ git ls-files -z -- workflow/ ':(exclude)workflow/prs.alfredui/vendor/marked/**' 
         cp -p "$source" "$target"
     done
 
+renderer="$payload/prs.alfredui/render-markdown.js"
+node_modules/.bin/esbuild scripts/render-markdown.ts --bundle --format=iife \
+    --global-name=hubfredMarkdown --target=es2019 \
+    --banner:js='function run(argv) { return hubfredMarkdown.run(argv); }' \
+    --outfile="$renderer"
 cp LICENSE "$payload/LICENSE"
 vendor="$payload/prs.alfredui/vendor/marked"
 mkdir -p "$vendor"

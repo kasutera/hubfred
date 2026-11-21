@@ -3,10 +3,14 @@
   "private": true,
   "scripts": {
     "package": "bash scripts/package.sh",
+    "pretest": "npm run package",
     "screenshots": "bash scripts/screenshots.sh",
-    "test": "node --test"
+    "test": "node --test",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "devDependencies": {
-    "marked": "18.2.1"
+    "esbuild": "0.28.2",
+    "marked": "18.2.1",
+    "typescript": "6.0.3"
   }
 }
