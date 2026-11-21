@@ -2,7 +2,7 @@
 
 ## Local Development
 
-Build from the repository root using Node.js 24, npm, and `zip`. Run `npm ci` on the first setup and whenever the lockfile changes.
+The workflow requires macOS 15 or later to run. The package can also be built on Linux, as in CI. Build from the repository root using Node.js 24, npm, and `zip`. Run `npm ci` on the first setup and whenever the lockfile changes.
 
 ```bash
 npm ci --ignore-scripts
@@ -14,7 +14,7 @@ open dist/hubfred.alfredworkflow
 
 ## README Screenshots
 
-Use Alfred 6 and Swift (Xcode Command Line Tools) on macOS. Grant Terminal permission to record the screen and control Alfred and Finder. Set macOS to Light Mode and manually select the **Alfred Classic** theme before capture; the command leaves both settings unchanged. The README images were captured at Retina (2×) resolution.
+Use macOS 15 or later, Alfred 6, and Swift (Xcode Command Line Tools). Grant Terminal permission to record the screen and control Alfred and Finder. Set macOS to Light Mode and manually select the **Alfred Classic** theme before capture; the command leaves both settings unchanged. The README images were captured at Retina (2×) resolution.
 
 ```bash
 npm ci --ignore-scripts

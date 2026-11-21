@@ -4,7 +4,7 @@ Find and open the GitHub pull requests and issues that involve you, right from A
 
 ## Install
 
-[Download the latest release](../../releases/latest) and open the `.alfredworkflow` file in Alfred. Requires Alfred 6 with Powerpack and [GitHub CLI](https://cli.github.com/) signed in to github.com.
+[Download the latest release](../../releases/latest) and open the `.alfredworkflow` file in Alfred. Requires macOS 15 or later, Alfred 6 with Powerpack, and [GitHub CLI](https://cli.github.com/) signed in to github.com.
 
 ## Pull Requests
 
