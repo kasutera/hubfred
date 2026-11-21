@@ -12,7 +12,7 @@ open dist/hubfred.alfredworkflow
 
 `npm test` runs the package build before executing tests. Use `npm run package` directly when you only need to build a distributable archive, including on Linux.
 
-`npm run package` reads files under `workflow/` from the working tree for files tracked in the Git index, so it includes uncommitted changes to existing files. Newly added files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution. TypeScript sources under `scripts/` are type-checked with `npm run typecheck` and bundled into the generated JXA renderer in package staging; neither TypeScript source nor development tooling is included in the workflow.
+`npm run package` reads files under `workflow/` from the working tree for files tracked in the Git index, so it includes uncommitted changes to existing files. Newly added files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution. TypeScript sources under `scripts/` are type-checked with `npm run typecheck` and bundled into the generated JXA renderer in package staging; neither TypeScript source nor development tooling is included in the workflow. ES2020 is a JXA compatibility target matching the original syntax, not a Node.js target.
 
 On macOS 15 or later, `npm test` builds the package and exercises search formatting, dashboard refresh decisions, and the production JXA Markdown renderer from that package with the locked Marked library. It also tests the sanitizer directly through Foundation in a test-only bundle. Tests use synthetic GitHub CLI responses and do not require GitHub credentials or Alfred.
 

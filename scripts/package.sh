@@ -36,7 +36,7 @@ git ls-files -z -- workflow/ ':(exclude)workflow/prs.alfredui/vendor/marked/**' 
 
 renderer="$payload/prs.alfredui/render-markdown.js"
 node_modules/.bin/esbuild scripts/render-markdown.ts --bundle --format=iife \
-    --global-name=hubfredMarkdown --target=es2019 \
+    --global-name=hubfredMarkdown --target=es2020 \
     --banner:js='function run(argv) { return hubfredMarkdown.run(argv); }' \
     --outfile="$renderer"
 cp LICENSE "$payload/LICENSE"

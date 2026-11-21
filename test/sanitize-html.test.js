@@ -20,7 +20,7 @@ test('sanitizes HTML directly with Foundation', {skip: process.platform !== 'dar
             bundle: true,
             format: 'iife',
             globalName: 'sanitizeHtmlTest',
-            target: 'es2019',
+            target: 'es2020',
             banner: {js: 'function run(argv) { return sanitizeHtmlTest.run(argv); }'},
             outfile: testBundle
         });
