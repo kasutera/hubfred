@@ -10,7 +10,9 @@ fi
 source ./cache.sh
 
 read_body() {
-    if [[ -r "$cache" ]]; then
+    if [[ "$dashboard_auth_resolved" != true ]]; then
+        printf 'Preview unavailable.'
+    elif [[ -r "$cache" ]]; then
         /usr/bin/jq -r --arg key "$identity" --arg url "$url" '
             ([select(.key == $key) | .results.items[] | select(.uid == $url)][0]) as $item
             | if $item == null then "Preview unavailable."
@@ -24,7 +26,7 @@ read_body() {
 
 # The POSIX alarm survives exec and bounds osascript without a watchdog process.
 if html=$(read_body | /usr/bin/perl -e 'alarm shift; exec @ARGV or die $!' 2 \
-    /usr/bin/osascript -l JavaScript render-markdown.js "$PWD/vendor/marked/marked.umd.js"); then
+    /usr/bin/osascript -l JavaScript render-markdown.js "$PWD/vendor/marked/marked.umd.js" "$url"); then
     :
 else
     case "$?" in
@@ -33,8 +35,8 @@ else
     esac
 fi
 
-printf '%s' "$html" | /usr/bin/jq -Rs --arg url "$url" --rawfile page preview.html '
+printf '%s' "$html" | /usr/bin/jq -Rs --rawfile page preview.html '
     {update: {ids: {
-        preview: {text: ($page + "<base href=\"" + $url + "\">" + .)}
+        preview: {text: ($page + .)}
     }}}
 '

@@ -18,8 +18,11 @@ if ! command -v gh >/dev/null; then
     exit 0
 fi
 
+search_limit=1000
+if [[ "$mode" == picker ]]; then search_limit=10; fi
+
 search() {
-    gh search "$kind" "$1" --state open --sort updated --limit 1000 \
+    gh search "$kind" "$1" --state open --sort updated --limit "$search_limit" \
         --json "$fields"
 }
 
@@ -87,7 +90,7 @@ if [[ -n "${pending[0]:-}" ]]; then
 fi
 
 /usr/bin/jq -s --arg icon_dir "$icon_dir" --argjson color_count "${#colors[@]}" \
-    --arg mode "$mode" --arg kind "$kind" --arg noun "$noun" --arg reasons "$reasons" '
+    --argjson search_limit "$search_limit" --arg mode "$mode" --arg kind "$kind" --arg noun "$noun" --arg reasons "$reasons" '
     def repo_color:
         ascii_downcase | explode
         | reduce .[] as $c (0; (. * 31 + $c) % 2147483647)
@@ -101,7 +104,7 @@ fi
     | group_by(.url)
     | map(.[0] + {reasons: (map(.reason) | unique)})
     | sort_by(.updatedAt) | reverse
-    | (if $mode == "picker" then .[:10] else . end)
+    | (if $mode == "picker" then .[:$search_limit] else . end)
     | {items: map(.repository.nameWithOwner as $repo
         | (if $kind == "issues" then "issue" elif .isDraft then "draft" else "ready" end) as $state
         | {title,
