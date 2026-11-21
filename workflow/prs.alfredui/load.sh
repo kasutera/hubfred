@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd -- "$(dirname -- "$0")"
 source ./cache.sh
+source ./cache-decisions.sh
 
 case "${dashboard_kind:-prs}" in
     prs)
@@ -41,22 +42,29 @@ fi
 umask 077
 /bin/mkdir -p "$cache_dir"
 
-age=600
-cached=
-if [[ -s "$cache" ]]; then
-    cached=$(/usr/bin/jq -c --arg key "$identity" 'select(.key == $key) | .results' "$cache") || cached=
-    if [[ -n "$cached" ]]; then
-        mtime=$(/usr/bin/stat -f %m "$cache")
-        age=$(( $(/bin/date +%s) - mtime ))
+read_cache_state() {
+    age=600
+    cached=
+    cached_identity=
+    if [[ -s "$cache" ]]; then
+        cached=$(/usr/bin/jq -c --arg key "$identity" 'select(.key == $key) | .results' "$cache") || cached=
+        if [[ -n "$cached" ]]; then
+            cached_identity=$identity
+            mtime=$(/usr/bin/stat -f %m "$cache")
+            age=$(( $(/bin/date +%s) - mtime ))
+        fi
     fi
-fi
+}
+
+read_cache_state
 
 configure=false
 if [[ "${1:-}" == cached ]]; then
     configure=true
-    if ((age < 600)); then results="$cached"; else results='{"items":[]}'; fi
+    if cache_should_show_cached "$age" "$cached_identity" "$identity"; then results="$cached"; else results='{"items":[]}'; fi
 else
-    if ((age < 30)); then printf '{}\n'; exit 0; fi
+    # Before fetching, a matching entry younger than 30 seconds suppresses a refresh.
+    if cache_should_skip_fetch "$age" "$cached_identity" "$identity"; then printf '{}\n'; exit 0; fi
     search_identity=$identity
     search_token=$dashboard_auth_token
     search_failed=false
@@ -67,13 +75,14 @@ else
         search_failed=true
     fi
 
+    # After fetching, re-resolve identity before fallback, display, or cache decisions.
     resolve_dashboard_auth
     if [[ "$dashboard_auth_resolved" != true || "$identity" != "$search_identity" ]]; then
         emit_failure
         exit 0
     fi
     if [[ "$search_failed" == true ]]; then
-        if ((age < 600)); then printf '{}\n'; else emit_failure; fi
+        if cache_should_reuse_after_failure "$age" "$cached_identity" "$identity" "$search_failed"; then printf '{}\n'; else emit_failure; fi
         exit 0
     fi
 
@@ -81,7 +90,7 @@ else
     trap '/bin/rm -f "$temporary"' EXIT
     /usr/bin/jq -c --arg key "$identity" '{key: $key, results: .}' <<< "$results" > "$temporary"
     /bin/mv -f "$temporary" "$cache"
-    if ((age < 600)) && [[ "$cached" == "$(/usr/bin/jq -c . <<< "$results")" ]]; then
+    if cache_should_show_cached "$age" "$cached_identity" "$identity" && [[ "$cached" == "$(/usr/bin/jq -c . <<< "$results")" ]]; then
         printf '{}\n'
         exit 0
     fi
