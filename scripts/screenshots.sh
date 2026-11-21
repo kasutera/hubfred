@@ -22,6 +22,7 @@ reload() {
 
 cleanup() {
     local status=$? restore_failed=false
+    trap '' INT TERM HUP
     if $restore_demo; then
         /bin/cp "$work/demo-original.plist" "$installed/info.plist" && reload "$bundle" || restore_failed=true
     fi
@@ -53,6 +54,23 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+
+if [[ "${1:-}" != --prepare ]]; then
+    workflows="${HUBFRED_ALFRED_WORKFLOWS:-$HOME/Library/Application Support/Alfred/Alfred.alfredpreferences/workflows}"
+    if [[ ! -d "$workflows" ]]; then
+        printf 'Alfred workflows directory does not exist: %s\n' "$workflows" >&2
+        exit 1
+    fi
+    # Lock the directory itself so aliases contend and no lock file needs cleanup.
+    # Bash keeps the descriptor open through the EXIT trap, including restoration.
+    exec 9<"$workflows"
+    /usr/bin/perl -MFcntl=:flock -MErrno=EWOULDBLOCK -e '
+        exit 0 if flock(STDIN, LOCK_EX | LOCK_NB);
+        die "Another screenshot capture is already running for $ARGV[0].\n"
+            if $! == EWOULDBLOCK;
+        die "Could not lock Alfred workflows directory $ARGV[0]: $!\n";
+    ' -- "$workflows" <&9 9<&-
+fi
 
 npm run package
 payload="$work/workflow"
@@ -109,7 +127,6 @@ if [[ "${1:-}" == --prepare ]]; then
     exit 0
 fi
 
-workflows="${HUBFRED_ALFRED_WORKFLOWS:-$HOME/Library/Application Support/Alfred/Alfred.alfredpreferences/workflows}"
 if [[ "$(/usr/bin/defaults read -g AppleInterfaceStyle 2>/dev/null || :)" == Dark ]]; then
     printf '%s\n' 'Set macOS to Light Mode and Alfred to the Alfred Classic theme before capturing; this command does not change either setting.' >&2
     exit 1
