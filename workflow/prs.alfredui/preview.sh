@@ -3,19 +3,37 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")"
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-row="${1:-null}"
-body=$(/usr/bin/jq -r '.preview // "Select an item to preview it."' <<< "${row:-null}")
-if command -v pandoc >/dev/null && html=$(printf '%s' "$body" \
-    | pandoc -f gfm-raw_html -t html5 --lua-filter=preview.lua); then
-    :
-else
-    html=$(/usr/bin/jq -nr --arg body "$body" \
-        '"<p>Install Pandoc to render GitHub Markdown.</p><p style=\"white-space:pre-wrap\">\($body | @html)</p>"')
+source ./cache.sh
+url="${1:-}"
+if [[ ! "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(pull|issues)/[0-9]+$ ]]; then
+    url=
 fi
 
-/usr/bin/jq -n --argjson row "${row:-null}" --arg html "$html" --rawfile page preview.html '
-    ($row.uid // "" | if test("^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(pull|issues)/[0-9]+$") then . else "https://github.com/" end) as $url
-    | {update: {ids: {
-        preview: {text: ($page + "<base href=\"" + $url + "\">" + $html)}
+read_body() {
+    if [[ -z "$url" ]]; then
+        printf 'Select an item to preview it.'
+    elif [[ -r "$cache" ]]; then
+        /usr/bin/jq -r --arg key "$identity" --arg url "$url" '
+            ([select(.key == $key) | .results.items[] | select(.uid == $url)][0]) as $item
+            | if $item == null then "Preview unavailable."
+              elif ($item.body // "") == "" then "No description."
+              else $item.body end
+        ' < "$cache"
+    else
+        printf 'Preview unavailable.'
+    fi
+}
+
+render_body() {
+    if command -v pandoc >/dev/null; then
+        pandoc -f gfm-raw_html -t html5 --lua-filter=preview.lua
+    else
+        /usr/bin/jq -Rs '"<p>Install Pandoc to render GitHub Markdown.</p><p style=\"white-space:pre-wrap\">\(. | @html)</p>"' -r
+    fi
+}
+
+read_body | render_body | /usr/bin/jq -Rs --arg url "${url:-https://github.com/}" --rawfile page preview.html '
+    {update: {ids: {
+        preview: {text: ($page + "<base href=\"" + $url + "\">" + .)}
     }}}
 '

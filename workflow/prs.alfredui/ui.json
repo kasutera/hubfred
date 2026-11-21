@@ -70,7 +70,7 @@
             {
               "triggers": "changed",
               "action": {
-                "type": "script", "src": "preview.sh", "args": ["{value:prs.selected}"]
+                "type": "script", "src": "preview.sh", "args": ["{value:prs.selected.uid}"]
               }
             },
             {"triggers": ["actioned", "doubleclicked"], "action": {"type": "script", "src": "open.sh", "args": ["{value:prs.selected.uid}"]}}

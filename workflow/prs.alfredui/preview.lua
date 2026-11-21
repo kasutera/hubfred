@@ -7,15 +7,15 @@ local function attachment_url(target)
   end
 end
 
-local function attachment_preview(image, url)
-  -- The browser can authenticate even when Alfred's WebKit view cannot.
-  return {pandoc.Image(image.caption, url), pandoc.Space(),
-          pandoc.Link('Open attachment in browser', url)}
-end
-
 function Image(image)
   local url = attachment_url(image.src)
-  if url then return attachment_preview(image, url) end
+  if url then return pandoc.Link('Open attachment in browser', url) end
+  local caption = #image.caption > 0 and image.caption or {pandoc.Str('Open image in browser')}
+  local scheme = image.src:lower():match('^([%a][%w+.-]*):')
+  if not scheme or scheme == 'http' or scheme == 'https' then
+    return pandoc.Link(caption, image.src)
+  end
+  return caption
 end
 
 -- GitHub may insert an HTML img tag when an attachment has a custom size.
@@ -30,7 +30,7 @@ local function raw_attachment(raw)
   local image = block.content[1]
   local url = attachment_url(image.src)
   if not url then return {} end
-  return attachment_preview(image, url)
+  return {pandoc.Link('Open attachment in browser', url)}
 end
 
 function RawInline(raw) return raw_attachment(raw) end
