@@ -6,8 +6,6 @@ Find and open the GitHub pull requests and issues that involve you, right from A
 
 [Download the latest release](../../releases/latest) and open the `.alfredworkflow` file in Alfred. Requires Alfred 6 with Powerpack and [GitHub CLI](https://cli.github.com/) signed in to github.com.
 
-If upgrading, disable the previously installed workflow before importing this version. Its new bundle ID may make Alfred install it separately; the previous workflow is not automatically removed or migrated.
-
 ## Pull Requests
 
 > Type `pr` followed by a space to find open pull requests you authored or were asked to review.

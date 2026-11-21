@@ -12,78 +12,20 @@ production_bundles=()
 production_backups=()
 production_count=0
 installed=
-preferences=
-theme_backup=
+capture_started=false
 restore_demo=false
 restore_production=false
-restore_theme=false
 
 reload() {
     /usr/bin/osascript -e "tell application id \"com.runningwithcrayons.Alfred\" to reload workflow \"$1\""
 }
 
-backup_theme_preferences() {
-    local plist relative
-    /bin/mkdir -p "$theme_backup" || return 1
-    for plist in "$preferences"/local/*/appearance/prefs.plist; do
-        [[ -f "$plist" ]] || continue
-        relative=${plist#"$preferences"/}
-        /bin/mkdir -p "$theme_backup/${relative%/*}" || return 1
-        /bin/cp -p "$plist" "$theme_backup/$relative" || return 1
-    done
-}
-
-restore_theme_preferences() {
-    local backup current relative failed=false
-    for backup in "$theme_backup"/local/*/appearance/prefs.plist; do
-        [[ -f "$backup" ]] || continue
-        relative=${backup#"$theme_backup"/}
-        current="$preferences/$relative"
-        if [[ ! -f "$current" ]] || ! /usr/bin/cmp -s "$backup" "$current"; then
-            if ! /bin/mkdir -p "${current%/*}" || ! /bin/cp -p "$backup" "$current"; then
-                printf 'Could not restore theme preferences from %s to %s\n' "$backup" "$current" >&2
-                failed=true
-            fi
-        fi
-    done
-    for current in "$preferences"/local/*/appearance/prefs.plist; do
-        [[ -f "$current" ]] || continue
-        relative=${current#"$preferences"/}
-        [[ -f "$theme_backup/$relative" ]] && continue
-        if ! /usr/bin/plutil -lint "$current" >/dev/null; then
-            printf 'Could not inspect new Alfred preferences file %s\n' "$current" >&2
-            failed=true
-        elif /usr/bin/plutil -extract lightthemeuid raw -o - "$current" >/dev/null 2>&1; then
-            if ! /usr/bin/plutil -remove lightthemeuid "$current"; then
-                printf 'Could not remove temporary theme setting from %s\n' "$current" >&2
-                failed=true
-            fi
-        fi
-    done
-    ! $failed
-}
-
-stop_alfred() {
-    local attempt
-    if /usr/bin/pgrep -x Alfred >/dev/null 2>&1; then
-        /usr/bin/osascript -e 'tell application id "com.runningwithcrayons.Alfred" to quit' || :
-    fi
-    for ((attempt = 0; attempt < 300; attempt++)); do
-        /usr/bin/pgrep -x Alfred >/dev/null 2>&1 || return 0
-        /bin/sleep 0.1
-    done
-    printf '%s\n' 'Alfred did not quit; theme settings were left untouched to avoid a save race.' >&2
-    return 1
-}
-
 cleanup() {
-    local status=$? restore_failed=false alfred_touched=false
+    local status=$? restore_failed=false
     if $restore_demo; then
-        alfred_touched=true
         /bin/cp "$work/demo-original.plist" "$installed/info.plist" && reload "$bundle" || restore_failed=true
     fi
     if $restore_production; then
-        alfred_touched=true
         local index
         for ((index = 0; index < production_count; index++)); do
             if /bin/cp "${production_backups[$index]}" "${production_paths[$index]}"; then
@@ -93,20 +35,12 @@ cleanup() {
             fi
         done
     fi
-    if $restore_theme; then
-        alfred_touched=true
-    fi
-    if $alfred_touched; then
-        if stop_alfred; then
-            if $restore_theme && ! restore_theme_preferences; then
-                restore_failed=true
-            fi
-        else
-            restore_failed=true
-        fi
+    if $capture_started && ! /usr/bin/swift scripts/screenshots/capture.swift --dismiss; then
+        printf '%s\n' 'Could not dismiss Alfred after capture.' >&2
+        restore_failed=true
     fi
     if $restore_failed; then
-        printf 'Could not fully restore Alfred settings. Recovery files: %s\n' "$work" >&2
+        printf 'Could not complete screenshot cleanup. Recovery files: %s\n' "$work" >&2
         exit 1
     fi
     if ! /bin/rm -r "$work"; then
@@ -169,10 +103,9 @@ fi
 
 workflows="${HUBFRED_ALFRED_WORKFLOWS:-$HOME/Library/Application Support/Alfred/Alfred.alfredpreferences/workflows}"
 if [[ "$(/usr/bin/defaults read -g AppleInterfaceStyle 2>/dev/null || :)" == Dark ]]; then
-    printf '%s\n' 'Set macOS to Light Mode before capturing screenshots; this command does not change macOS appearance.' >&2
+    printf '%s\n' 'Set macOS to Light Mode and Alfred to the Alfred Classic theme before capturing; this command does not change either setting.' >&2
     exit 1
 fi
-preferences="$(/usr/bin/dirname "$workflows")/preferences"
 for plist in "$workflows"/*/info.plist; do
     workflow_bundle=$(/usr/libexec/PlistBuddy -c 'Print :bundleid' "$plist" 2>/dev/null || :)
     case "$workflow_bundle" in
@@ -186,12 +119,6 @@ for plist in "$workflows"/*/info.plist; do
 done
 if [[ -z "$installed" ]]; then
     printf '%s\n' 'Run npm run screenshots -- --prepare and import the generated demo workflow first.' >&2
-    exit 1
-fi
-
-theme_backup="$work/theme-preferences"
-if ! backup_theme_preferences; then
-    printf 'Could not back up Alfred theme preferences under %s; no Alfred settings were changed.\n' "$preferences" >&2
     exit 1
 fi
 
@@ -222,8 +149,7 @@ fi
 ' > "$work/demo.json"
 /usr/bin/plutil -convert xml1 -o "$installed/info.plist" "$work/demo.json"
 reload "$bundle"
-restore_theme=true
-/usr/bin/osascript -e 'tell application id "com.runningwithcrayons.Alfred" to set theme "Alfred Classic"'
+capture_started=true
 /usr/bin/swift scripts/screenshots/capture.swift "$work/images"
 /bin/mkdir -p docs/screenshots
 /bin/cp "$work/images/"{picker,pr-dashboard,issue-picker,dashboard}.png docs/screenshots/
