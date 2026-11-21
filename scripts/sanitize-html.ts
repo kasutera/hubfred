@@ -97,7 +97,8 @@ export function sanitizeHtml(html: string, itemURL: string | undefined): string 
         if (!candidate.isNil()) baseURL = candidate;
     }
 
-    const source = `<!doctype html><html><head></head><body>${html}</body></html>`;
+    const source = '<!doctype html><html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body>' +
+        html + '</body></html>';
     const data = $.NSString.stringWithString(source).dataUsingEncoding($.NSUTF8StringEncoding);
     const document = $.NSXMLDocument.alloc.initWithDataOptionsError(data, HTML_PARSE_OPTIONS, null);
     if (document.isNil()) throw new Error('Markdown HTML could not be parsed');

@@ -50,6 +50,13 @@ function table(columns, rows = 0) {
     return [`| ${header.join(' | ')} |`, `| ${delimiter.join(' | ')} |`, ...body].join('\n');
 }
 
+test('preserves Japanese UTF-8 text in the packaged production preview', () => {
+    const japanese = '日本語の説明文です。𠮷野家の𠮷はUTF-8で保持されます。';
+    const result = render(japanese);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(/<p>([\s\S]*?)<\/p>/.exec(result.stdout)?.[1].trim(), japanese);
+});
+
 test('uses the production JXA renderer for GitHub task checklists', () => {
     const result = render('- [x] completed\n- [ ] remaining');
     assert.equal(result.status, 0, result.stderr);
