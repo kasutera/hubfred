@@ -2,18 +2,19 @@
 
 ## Local Development
 
-The workflow requires macOS 15 or later to run. The package can also be built on Linux, as in CI. Build from the repository root using Node.js 24, npm, and `zip`. Run `npm ci` on the first setup and whenever the lockfile changes.
+The workflow requires macOS 15 or later to run. The package can also be built on Linux, as in CI. Build from the repository root using Node.js 24, npm, and `zip`; Node.js is build and test tooling only, and the packaged workflow does not require Node.js. Run `npm ci` on the first setup and whenever the lockfile changes.
 
 ```bash
 npm ci --ignore-scripts
 npm test
-npm run package
 open dist/hubfred.alfredworkflow
 ```
 
-`npm run package` reads files under `workflow/` from the working tree for files tracked in the Git index, so it includes uncommitted changes to existing files. Newly added files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution.
+`npm test` runs the package build before executing tests. Use `npm run package` directly when you only need to build a distributable archive, including on Linux.
 
-On macOS 15 or later, `npm test` exercises search formatting, dashboard refresh decisions, and the production JXA Markdown renderer with the locked Marked library. The tests use synthetic GitHub CLI responses and do not require GitHub credentials or Alfred.
+`npm run package` reads files under `workflow/` from the working tree for files tracked in the Git index, so it includes uncommitted changes to existing files. Newly added files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution. TypeScript sources under `scripts/` are type-checked with `npm run typecheck` and bundled into the generated JXA renderer in package staging; neither TypeScript source nor development tooling is included in the workflow. ES2020 is a JXA compatibility target matching the original syntax, not a Node.js target.
+
+On macOS 15 or later, `npm test` builds the package and exercises search formatting, dashboard refresh decisions, and the production JXA Markdown renderer from that package with the locked Marked library. It also tests the sanitizer directly through Foundation in a test-only bundle. Tests use synthetic GitHub CLI responses and do not require GitHub credentials or Alfred.
 
 ## README Screenshots
 

@@ -1,15 +1,29 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
+const { mkdtempSync, rmSync } = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const { test } = require('node:test');
+const { after, before, test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
-const renderer = process.env.HUBFRED_TEST_RENDERER_PATH ||
-    path.join(root, 'workflow', 'prs.alfredui', 'render-markdown.js');
-const marked = process.env.HUBFRED_TEST_MARKED_PATH ||
-    path.join(root, 'node_modules', 'marked', 'lib', 'marked.umd.js');
+const packagedWorkflow = path.join(root, 'dist', 'hubfred.alfredworkflow');
+let packageDirectory;
+let renderer;
+let marked;
+
+before(() => {
+    packageDirectory = mkdtempSync(path.join(os.tmpdir(), 'hubfred-renderer-test-'));
+    execFileSync('/usr/bin/unzip', ['-q', packagedWorkflow, '-d', packageDirectory]);
+    renderer = path.join(packageDirectory, 'prs.alfredui', 'render-markdown.js');
+    marked = path.join(packageDirectory, 'prs.alfredui', 'vendor', 'marked', 'marked.umd.js');
+});
+
+after(() => {
+    if (packageDirectory) rmSync(packageDirectory, {recursive: true, force: true});
+});
+
 const itemURL = 'https://github.com/owner/repo/issues/42';
 
 function render(markdown) {
