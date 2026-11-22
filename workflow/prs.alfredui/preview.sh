@@ -10,18 +10,19 @@ fi
 source ./cache.sh
 
 read_body() {
-    if [[ "$dashboard_auth_resolved" != true ]]; then
+    if [[ "$dashboard_auth_resolved" != true || ! -r "$cache" ]]; then
         printf 'Preview unavailable.'
-    elif [[ -r "$cache" ]]; then
-        /usr/bin/jq -r --arg key "$identity" --arg url "$url" '
-            ([select(.key == $key) | .results.items[] | select(.uid == $url)][0]) as $item
-            | if $item == null then "Preview unavailable."
-              elif ($item.body // "") == "" then "No description."
-              else $item.body end
-        ' < "$cache"
-    else
-        printf 'Preview unavailable.'
+        return
     fi
+
+    cache_sqlite -readonly "$cache" "
+        SELECT body FROM bodies WHERE url = '$url'
+        AND EXISTS (SELECT 1 FROM dashboard WHERE identity = '$identity');
+    " | /usr/bin/jq -rs '
+        if length == 0 then "Preview unavailable."
+        elif .[0] == "" then "No description."
+        else .[0] end
+    '
 }
 
 # The POSIX alarm survives exec and bounds osascript without a watchdog process.

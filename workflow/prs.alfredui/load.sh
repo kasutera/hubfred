@@ -46,17 +46,23 @@ read_cache_state() {
     age=600
     cached=
     cached_identity=
-    if [[ -s "$cache" ]]; then
-        cached=$(/usr/bin/jq -c --arg key "$identity" 'select(.key == $key) | .results' "$cache") || cached=
-        if [[ -n "$cached" ]]; then
-            cached_identity=$identity
-            mtime=$(/usr/bin/stat -f %m "$cache")
-            age=$(( $(/bin/date +%s) - mtime ))
-        fi
+    cached_digest=
+    local columns='unixepoch() - saved_at, digest' state
+    # The refresh checks only metadata. Preload reads rows, never descriptions.
+    if [[ "${1:-}" == cached ]]; then columns+=', list'; fi
+    if [[ -s "$cache" ]] && state=$(cache_sqlite -readonly -separator $'\n' "$cache" \
+        "SELECT $columns FROM dashboard WHERE identity = '$identity';" 2>/dev/null) &&
+        [[ -n "$state" ]]; then
+        {
+            IFS= read -r age
+            IFS= read -r cached_digest
+            IFS= read -r cached || :
+        } <<< "$state"
+        cached_identity=$identity
     fi
 }
 
-read_cache_state
+read_cache_state "${1:-}"
 
 configure=false
 if [[ "${1:-}" == cached ]]; then
@@ -86,11 +92,24 @@ else
         exit 0
     fi
 
+    digest=$(printf '%s' "$results" | /usr/bin/shasum -a 256)
     temporary=$(/usr/bin/mktemp "$cache_dir/dashboard.XXXXXX")
-    trap '/bin/rm -f "$temporary"' EXIT
-    /usr/bin/jq -c --arg key "$identity" '{key: $key, results: .}' <<< "$results" > "$temporary"
+    trap '/bin/rm -f "$temporary" "$temporary-journal"' EXIT
+    # Keep both tables in one snapshot so readers never see a mixed refresh.
+    /usr/bin/jq -r --arg key "$identity" --arg digest "$digest" '
+        def literal: "\u0027" + gsub("\u0027"; "\u0027\u0027") + "\u0027";
+        ([
+            "BEGIN;",
+            "CREATE TABLE dashboard (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);",
+            "CREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;",
+            "INSERT INTO dashboard VALUES (\($key | literal), unixepoch(), \($digest | literal), \({items: [.items[] | del(.body)]} | @json | literal));"
+        ][]),
+        (.items[] | select(.uid) |
+            "INSERT INTO bodies VALUES (\(.uid | literal), \((.body // "") | @json | literal));"),
+        "COMMIT;"
+    ' <<< "$results" | cache_sqlite "$temporary"
     /bin/mv -f "$temporary" "$cache"
-    if cache_should_show_cached "$age" "$cached_identity" "$identity" && [[ "$cached" == "$(/usr/bin/jq -c . <<< "$results")" ]]; then
+    if cache_should_show_cached "$age" "$cached_identity" "$identity" && [[ "$cached_digest" == "$digest" ]]; then
         printf '{}\n'
         exit 0
     fi

@@ -1,11 +1,15 @@
 # Shared by the dashboard loader and preview.
 case "${dashboard_kind:-prs}" in
-    prs) cache_name=dashboard-v2.json ;;
-    issues) cache_name=issues-dashboard-v2.json ;;
+    prs) cache_name=dashboard-v3.sqlite3 ;;
+    issues) cache_name=issues-dashboard-v3.sqlite3 ;;
     *) exit 2 ;;
 esac
 cache_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.hubfred}"
 cache="$cache_dir/$cache_name"
+
+cache_sqlite() {
+    /usr/bin/sqlite3 -batch -bail -init /dev/null "$@"
+}
 
 # Resolve the github.com credential the search will use, without changing the
 # caller's environment. The dashboard key must follow the same credential.

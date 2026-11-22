@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } = require('node:fs');
+const { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
@@ -30,7 +30,7 @@ const fetchedItem = {
     updatedAt: '2026-01-20T12:00:00Z',
     url: 'https://github.com/owner/repo/pull/99',
     isDraft: false,
-    body: 'New fetched preview'
+    body: "New fetched preview: 日本語, 'quotes' and semi;colons.\n\nSecond paragraph."
 };
 const mockGh = `
 gh() {
@@ -58,6 +58,13 @@ function cacheKey(token) {
     return `${hash}  -`;
 }
 
+function sqlite(file, sql) {
+    const result = spawnSync('/usr/bin/sqlite3', ['-batch', '-bail', '-init', '/dev/null', file, sql],
+        {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+}
+
 function scenario(t, {
     activeToken = 'token-a', cacheToken = 'token-a',
     searchFails = true, authAfterSearch = null
@@ -73,10 +80,16 @@ function scenario(t, {
         }
     }
 
-    const cacheFile = path.join(cacheDir, 'dashboard-v2.json');
-    writeFileSync(cacheFile, JSON.stringify({key: cacheKey(cacheToken), results: {items: [oldItem]}}));
-    const cachedAt = Math.floor(Date.now() / 1000) - 120;
-    utimesSync(cacheFile, cachedAt, cachedAt);
+    const cacheFile = path.join(cacheDir, 'dashboard-v3.sqlite3');
+    const {body, ...oldRow} = oldItem;
+    const literal = value => `'${value.replaceAll("'", "''")}'`;
+    sqlite(cacheFile, `
+        CREATE TABLE dashboard (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);
+        CREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;
+        INSERT INTO dashboard VALUES (${literal(cacheKey(cacheToken))}, unixepoch() - 120, 'old-result-digest',
+            ${literal(JSON.stringify({items: [oldRow]}))});
+        INSERT INTO bodies VALUES (${literal(oldURL)}, ${literal(JSON.stringify(body))});
+    `);
     const originalCache = readFileSync(cacheFile);
     const originalCacheStats = statSync(cacheFile);
     const searchResults = path.join(directory, 'search-results.json');
@@ -103,8 +116,8 @@ function scenario(t, {
     delete env.GH_TOKEN;
     delete env.GITHUB_TOKEN;
 
-    function run() {
-        const result = spawnSync('/bin/bash', [loader], {
+    function run(...args) {
+        const result = spawnSync('/bin/bash', [loader, ...args], {
             cwd: path.dirname(loader),
             env,
             encoding: 'utf8',
@@ -136,7 +149,7 @@ function scenario(t, {
             const currentStats = statSync(cacheFile);
             assert.equal(currentStats.ino, originalCacheStats.ino);
             assert.equal(currentStats.mtimeMs, originalCacheStats.mtimeMs);
-            assert.deepEqual(readdirSync(cacheDir).sort(), ['dashboard-v2.json', 'octicons-v5']);
+            assert.deepEqual(readdirSync(cacheDir).sort(), ['dashboard-v3.sqlite3', 'octicons-v5']);
         }
     };
 }
@@ -157,6 +170,7 @@ test('same-auth failed refresh preserves the cached display', t => {
 
 test('does not show older cached data after switching to another auth identity', t => {
     const testCase = scenario(t, {activeToken: 'token-b', cacheToken: 'token-a'});
+    assert.equal(testCase.run('cached').update.ids.prs, undefined);
     assertRefreshFailure(testCase.run());
     assert.equal(testCase.searchCount(), 2);
     testCase.assertNoCacheWrites();
@@ -170,7 +184,7 @@ test('search fixture auth change suppresses fetched results and cache writes and
     testCase.assertNoCacheWrites();
 });
 
-test('unchanged auth emits and caches the same successful search results', t => {
+test('a successful refresh serves the same rows from the body-free cache', t => {
     const testCase = scenario(t, {searchFails: false});
     const output = testCase.run();
     const rows = output.update.ids.prs.data.src;
@@ -180,8 +194,11 @@ test('unchanged auth emits and caches the same successful search results', t => 
     assert.equal(testCase.currentToken(), 'token-a');
     assert.equal(testCase.searchCount(), 2);
 
-    const persisted = JSON.parse(readFileSync(testCase.cacheFile, 'utf8'));
-    assert.equal(persisted.key, cacheKey('token-a'));
-    assert.equal(persisted.results.items.length, 1);
-    assert.equal(persisted.results.items[0].title, fetchedItem.title);
+    assert.deepEqual(testCase.run('cached').update.ids.prs.data.src, rows);
+    assert.deepEqual(testCase.run('refresh'), {});
+    assert.equal(testCase.searchCount(), 2);
+    const persistedList = JSON.parse(sqlite(testCase.cacheFile, 'SELECT list FROM dashboard;'));
+    assert.equal(persistedList.items[0].body, undefined);
+    const persistedBody = JSON.parse(sqlite(testCase.cacheFile, 'SELECT body FROM bodies;'));
+    assert.equal(persistedBody, fetchedItem.body);
 });
