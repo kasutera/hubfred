@@ -13,14 +13,17 @@ def local_timestamp:
 | sort_by(.updatedAt) | reverse
 | (if $mode == "picker" then .[:$search_limit] else . end)
 | {items: map(.repository.nameWithOwner as $repo
-    | (if $kind == "issues" then "issue" elif .isDraft then "draft" else "ready" end) as $state
+    | (if .url | test("/issues/[0-9]+$") then "issue" elif .isDraft then "draft" else "ready" end) as $state
     | {title,
        subtitle: "\($repo)#\(.number) · \(.author.login) · \(.updatedAt | local_timestamp) · \(.reasons | join(" · "))\(if .isDraft then " · Draft" else "" end)",
        match: "\(.title) \($repo) #\(.number) \(.number)",
        uid: .url,
        arg: .url,
        icon: {path: "\($icon_dir)/\($repo | repo_color)-\($state).png"}}
-      + if $mode == "dashboard" then {body, reasons, labels: [.labels[]?.name]} else {} end)}
+      + if $mode == "dashboard" then {
+          body, reasons, labels: [.labels[]?.name],
+          kind: (if $state == "issue" then "kindissue" else "kindpr" end)
+        } else {} end)}
 | if .items == [] then
     {items: [{title: "No matching open \($noun)", subtitle: "No matching items on github.com", valid: false}]}
   else . end

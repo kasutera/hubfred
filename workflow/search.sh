@@ -67,37 +67,49 @@ fi
 search_limit=1000
 if [[ "$mode" == picker ]]; then search_limit=10; fi
 
-search() {
-    gh search "$kind" "$1" --state open --sort updated --limit "$search_limit" \
-        --json "$fields"
-}
-
-fields=author,number,repository,title,updatedAt,url
+pr_queries=('prs:author:@me' 'prs:user-review-requested:@me')
+issue_queries=('issues:assignee:@me' 'issues:author:@me' 'issues:mentions:@me' 'issues:commenter:@me')
+pr_reasons='Authored|Review requested'
+issue_reasons='Assigned|Authored|Mentioned|Commented'
 case "$kind" in
     prs)
         noun=PRs
-        fields+=,isDraft
-        qualifiers=('author:@me' 'user-review-requested:@me')
-        reasons='Authored|Review requested'
+        queries=("${pr_queries[@]}")
+        reasons=$pr_reasons
         states=(ready draft)
         ;;
     issues)
         noun=Issues
-        qualifiers=('assignee:@me' 'author:@me' 'mentions:@me' 'commenter:@me')
-        reasons='Assigned|Authored|Mentioned|Commented'
+        queries=("${issue_queries[@]}")
+        reasons=$issue_reasons
         states=(issue)
-        if [[ "$mode" == dashboard ]]; then fields+=,labels; fi
+        ;;
+    all)
+        noun='PRs and issues'
+        queries=("${pr_queries[@]}" "${issue_queries[@]}")
+        reasons="$pr_reasons|$issue_reasons"
+        states=(ready draft issue)
         ;;
     *) exit 2 ;;
 esac
-[[ "$mode" != dashboard ]] || fields+=,body
+
+search() {
+    local query_kind=${1%%:*} fields=author,number,repository,title,updatedAt,url
+    if [[ "$query_kind" == prs ]]; then fields+=,isDraft; fi
+    if [[ "$mode" == dashboard ]]; then
+        fields+=,body
+        if [[ "$kind" != prs ]]; then fields+=,labels; fi
+    fi
+    gh search "$query_kind" "${1#*:}" --state open --sort updated --limit "$search_limit" \
+        --json "$fields"
+}
 
 results_dir=$(/usr/bin/mktemp -d)
 trap '/bin/rm -r "$results_dir"' EXIT
 files=() pids=()
-for i in "${!qualifiers[@]}"; do
+for i in "${!queries[@]}"; do
     files+=("$results_dir/$i.json")
-    search "${qualifiers[$i]}" > "${files[$i]}" &
+    search "${queries[$i]}" > "${files[$i]}" &
     pids+=("$!")
 done
 
@@ -136,5 +148,5 @@ if [[ -n "${pending[0]:-}" ]]; then
 fi
 
 /usr/bin/jq -s --arg icon_dir "$icon_dir" --argjson color_count "${#colors[@]}" \
-    --argjson search_limit "$search_limit" --arg mode "$mode" --arg kind "$kind" --arg noun "$noun" --arg reasons "$reasons" \
+    --argjson search_limit "$search_limit" --arg mode "$mode" --arg noun "$noun" --arg reasons "$reasons" \
     -f search-results.jq "${files[@]}"

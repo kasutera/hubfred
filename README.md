@@ -26,7 +26,14 @@ Find and open the GitHub pull requests and issues that involve you, right from A
 
 ![The Issue dashboard showing a labeled list and a Markdown description with a checklist.](docs/screenshots/dashboard.png)
 
-The `pr` and `is` pickers show up to 10 items, most recently updated first; typing a search filters that list. The `prs` and `iss` dashboards are not capped.
+## Pull Requests and Issues
+
+> Type `gh` followed by a space to find both pull requests and issues in one picker.
+
+> Type `ghs` and press Enter to open the combined dashboard. Filter by item type, involvement, or label and preview either kind of item.
+
+Pickers show up to 10 items total, most recently updated first; typing a search filters that list. Dashboards show all items returned by their searches.
+
 Search by title, repository, or number. Press Enter to open the selected item on GitHub.
 
 See [MAINTAINER.md](MAINTAINER.md) for development, screenshots, and releases.

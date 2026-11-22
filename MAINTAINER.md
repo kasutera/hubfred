@@ -37,7 +37,7 @@ During capture, installed production workflows under the current or legacy Bundl
 
 ## Runtime Behavior
 
-- Searches run in parallel for each participation category. The `pr` and `is` pickers fetch up to 10 results per category, then combine and deduplicate them to show the 10 most recently updated items. The `prs` and `iss` dashboards fetch up to 1,000 results per category (the GitHub Search limit per query), then combine and deduplicate them in update-time order. Update times are shown in the Mac's local time.
+- Searches run in parallel for each participation category. The `pr`, `is`, and `gh` pickers fetch up to 10 results per category, then combine and deduplicate them to show the 10 most recently updated items. The `prs`, `iss`, and `ghs` dashboards fetch up to 1,000 results per category (the GitHub Search limit per query), then combine and deduplicate them in update-time order. `gh` and `ghs` run both the PR and issue searches and sort the results together. Update times are shown in the Mac's local time.
 - The bundled [Marked](https://github.com/markedjs/marked) converts GFM for display in WebKit. Marked's output is reconstructed from allowed elements, attributes, and URLs; arbitrary raw HTML is not passed through, and images are shown as links instead of loaded inline. Conversion allows up to 128 KiB of UTF-8 input on stdin, 128 columns per GFM table, 8,192 table cells across the document (including headers and cells added to fill short rows), and 512 KiB of UTF-8 HTML output. If conversion exceeds any of these limits or times out after 2 seconds, the preview directs readers to open the item on GitHub.
 
 ## Cache Strategy
