@@ -36,8 +36,8 @@ Find and open the GitHub pull requests and issues that involve you, right from A
 >
 > ![The combined dashboard showing pull requests and issues alongside a Markdown preview.](docs/screenshots/github-dashboard.png)
 
-Pickers show up to 10 items total, most recently updated first; typing a search filters that list. Dashboards show all items returned by their searches.
+Pickers show up to 10 items, most recently updated first. With a query, they filter the broader dashboard results before taking the latest 10 matches. If the dashboard cache is missing or stale, the workflow refreshes it from GitHub. Dashboards show all items returned by their searches.
 
-Search by title, repository, or number. Press Enter to open the selected item on GitHub.
+Search by title, repository, or number. In a picker, a repository name can also be matched by its prefix without the owner (for example, `gh widget` matches `example-org/widget-builder`). Press Enter to open the selected item on GitHub.
 
 See [MAINTAINER.md](MAINTAINER.md) for development, screenshots, and releases.

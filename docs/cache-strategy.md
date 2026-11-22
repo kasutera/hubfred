@@ -2,9 +2,9 @@
 
 ## Performance
 
-- The workflow manages the caches for pickers (`pr`, `is`, `gh`) and dashboards (`prs`, `iss`, `ghs`) without using Alfred's built-in result cache. They share the SQLite cache format and freshness rules. Each view has its own cache file, which the workflow replaces atomically on refresh. If refreshes overlap, the last successful replacement wins.
+- The workflow manages the caches for pickers (`pr`, `is`, `gh`) and dashboards (`prs`, `iss`, `ghs`) without using Alfred's built-in result cache. Both use the same SQLite format and freshness rules. Unfiltered pickers and dashboards have separate snapshots; a filtered picker shares its corresponding dashboard snapshot. The workflow replaces snapshots atomically. If refreshes overlap, the last successful replacement wins.
 - If the credential matches and the cache is younger than `CACHE_FRESH_SECONDS`, the workflow skips the fetch. When a fetch is due, it shows the cached list first if the credential matches and the cache is younger than `CACHE_STALE_SECONDS` when the refresh starts. The list stays visible during the refresh and remains visible if the fetch fails and the credential hasn't changed. Without a usable cache, the view waits for new results and shows an error if the fetch fails. Expiration does not delete the cache. Both thresholds are defined in [cache-decisions.sh](../workflow/prs.alfredui/cache-decisions.sh).
-- When a picker shows a stale list, Alfred reruns the Script Filter once to refresh it.
+- A filtered picker reads only the list from the dashboard snapshot and applies the query before taking the latest matches. Alfred reruns the Script Filter once to refresh a stale list or fetch a missing filtered list.
 - On launch, dashboards read only the list. The asynchronous refresh then reads only the cache metadata to decide whether to fetch. The preview reads the selected item's description from a separate table indexed by URL, without making a network request.
 - Generated Octicon PNGs are cached in `octicons-v5` and reused across accounts.
 
