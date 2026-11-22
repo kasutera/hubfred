@@ -2,16 +2,15 @@
 
 ## Performance
 
-- **Pickers (`pr`, `is`):** Alfred caches results for 30 seconds. With `loosereload`, it can show cached results while refreshing in the background.
-- **Dashboards (`prs`, `iss`):** Each has its own SQLite cache (`dashboard-v3.sqlite3` and `issues-dashboard-v3.sqlite3`). On launch, preload reads only the list; the asynchronous refresh checks only metadata before deciding whether to fetch. The preview reads the selected description from a separate table indexed by URL, without a network request.
-- **Dashboard freshness:** A matching snapshot younger than 30 seconds skips the fetch. From 30 seconds to under 10 minutes, the cached list stays visible during refresh and remains visible if fetching fails without an authentication change. With no matching snapshot under 10 minutes old, the dashboard waits for fresh results and shows an error if fetching fails. Expiration does not delete the snapshot.
-- **Snapshot updates:** The loader atomically replaces the database so the list and descriptions are published together. Overlapping refreshes run independently; the last successful replacement wins.
-- **Icons:** Generated Octicon PNGs are reused from the `octicons-v5` cache directory across accounts.
+- The pickers (`pr`, `is`) and dashboards (`prs`, `iss`) share the SQLite cache format and freshness rules. Each view has its own cache file, which the workflow replaces atomically on refresh. If refreshes overlap, the last successful replacement wins.
+- If the credential matches and the cache is younger than `CACHE_FRESH_SECONDS`, the workflow skips the fetch. When a fetch is due, it shows the cached list first if the credential matches and the cache is younger than `CACHE_STALE_SECONDS` when the refresh starts. The list stays visible during the refresh and remains visible if the fetch fails and the credential hasn't changed. Without a usable cache, the view waits for new results and shows an error if the fetch fails. Expiration does not delete the cache. Both thresholds are defined in [cache-decisions.sh](../workflow/prs.alfredui/cache-decisions.sh).
+- The workflow manages the picker cache instead of using Alfred's built-in result cache. When a picker shows a stale list, Alfred reruns the Script Filter once to refresh it.
+- On launch, dashboards read only the list. The asynchronous refresh then reads only the cache metadata to decide whether to fetch. The preview reads the selected item's description from a separate table indexed by URL, without making a network request.
+- Generated Octicon PNGs are cached in `octicons-v5` and reused across accounts.
 
 ## Security
 
-- **Dashboard identity:** The cache key is a SHA-256 digest of the effective github.com token, resolved from the first nonempty `GH_TOKEN`, then `GITHUB_TOKEN`, or the local result of `gh auth token --hostname github.com`. Only the digest is stored. The loader passes the raw token to `search.sh` through `GH_TOKEN`.
-- **Dashboard isolation:** Only snapshots matching the resolved credential are used. If authentication cannot be resolved or changes during refresh, the dashboard clears the list and preview, shows an error, and does not cache the fetched results.
-- **Picker limitation:** Alfred's picker cache is not credential-specific. Run `reload` in Alfred after switching GitHub CLI accounts.
-- **Local storage:** Dashboard lists and descriptions persist unencrypted under `$alfred_workflow_cache`, falling back to `$HOME/Library/Caches/jp.kasutera.hubfred`. The loader uses `umask 077` for new cache directories and database files; existing directory permissions are unchanged.
-- **Screenshot isolation:** The screenshot workflow uses a separate Bundle ID and `$HOME/Library/Caches/org.hubfred.screenshots`. It uses synthetic fixtures without connecting to GitHub.
+- The cache key is the SHA-256 hash of the token used for `github.com`. The workflow checks `GH_TOKEN`, then `GITHUB_TOKEN`, and uses the first nonempty value. If neither is set to a nonempty value, it uses the output of the local `gh auth token --hostname github.com` command. The cache stores the hash, not the token itself. The workflow passes the raw token to `search.sh` through the `GH_TOKEN` environment variable.
+- Pickers and dashboards use only caches that match the resolved credential. If the credential can't be resolved or changes during a refresh, the view clears the old list and shows an error. Dashboards also clear the preview. Results fetched with the old credential are neither displayed nor stored.
+- Lists and dashboard descriptions are stored unencrypted under `$alfred_workflow_cache`. If that variable is unset, the workflow uses `$HOME/Library/Caches/jp.kasutera.hubfred`. It creates new cache directories and database files with `umask 077` and leaves existing directory permissions unchanged.
+- The screenshot workflow has a separate bundle ID and stores its cache at `$HOME/Library/Caches/org.hubfred.screenshots`. It uses synthetic data and does not connect to GitHub.

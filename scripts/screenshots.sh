@@ -96,7 +96,7 @@ gh() {
 }
 source ./search-live.sh
 BASH
-# Both dashboard actions use this private cache and never inspect CLI credentials.
+# Pickers and dashboards share this private cache root and synthetic credential.
 /usr/bin/shasum -a 256 "$payload/fixtures.json" | {
     read -r checksum _
     printf 'export GH_TOKEN=%s\n' "$checksum"

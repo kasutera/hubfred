@@ -13,9 +13,55 @@ message() {
         '{items: [{title: $title, subtitle: $subtitle, valid: false}]}'
 }
 
+if [[ "$mode" == cached-picker ]]; then
+    cache_mode=picker
+    cache_kind=$kind
+    source ./prs.alfredui/cache.sh
+
+    if ! command -v gh >/dev/null; then
+        message 'GitHub CLI not found' 'Install gh, then sign in to github.com.'
+        exit 0
+    fi
+    if [[ "$dashboard_auth_resolved" != true ||
+          ( -n "${hubfred_refresh_identity:-}" && "$hubfred_refresh_identity" != "$identity" ) ]]; then
+        message 'Could not load GitHub results' 'Check your GitHub CLI login and reopen the picker.'
+        exit 0
+    fi
+
+    cache_read list
+    rerun=false
+    if cache_should_skip_fetch "$age" "$cached_identity" "$identity"; then
+        results=$cached
+    elif [[ -z "${hubfred_refresh_identity:-}" ]] && cache_should_show_cached "$age" "$cached_identity" "$identity"; then
+        # Alfred keeps these rows visible while the one-shot rerun fetches replacements.
+        results=$cached
+        rerun=true
+    else
+        refresh_status=0
+        cache_refresh_search ./search.sh picker "$kind" || refresh_status=$?
+        case "$refresh_status" in
+            0) cache_write '' ;;
+            1)
+                if cache_should_reuse_after_failure "$age" "$cached_identity" "$identity" true; then
+                    results=$cached
+                elif [[ -z "$results" ]]; then
+                    message 'Could not load GitHub results' 'Check the network and your GitHub CLI login.'
+                    exit 0
+                fi
+                ;;
+            *) message 'Could not load GitHub results' 'GitHub CLI login changed. Reopen the picker.'; exit 0 ;;
+        esac
+    fi
+    /usr/bin/jq --argjson rerun "$rerun" --arg key "$identity" '
+        . + {skipknowledge: true}
+        | if $rerun then . + {rerun: 0.1, variables: {hubfred_refresh_identity: $key}} else . end
+    ' <<< "$results"
+    exit 0
+fi
+
 if ! command -v gh >/dev/null; then
     message 'GitHub CLI not found' 'Install gh, then sign in to github.com.'
-    exit 0
+    exit 1
 fi
 
 search_limit=1000
@@ -61,7 +107,7 @@ for pid in "${pids[@]}"; do
 done
 if ((failed)); then
     message "Could not load GitHub $noun" 'Check the network and your GitHub CLI login.'
-    exit 0
+    exit 1
 fi
 
 icon_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.hubfred}/octicons-v5"

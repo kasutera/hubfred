@@ -3,7 +3,6 @@ set -euo pipefail
 
 cd -- "$(dirname -- "$0")"
 source ./cache.sh
-source ./cache-decisions.sh
 
 case "${dashboard_kind:-prs}" in
     prs)
@@ -39,76 +38,33 @@ if [[ "$dashboard_auth_resolved" != true ]]; then
     exit 0
 fi
 
-umask 077
-/bin/mkdir -p "$cache_dir"
-
-read_cache_state() {
-    age=600
-    cached=
-    cached_identity=
-    cached_digest=
-    local columns='unixepoch() - saved_at, digest' state
-    # The refresh checks only metadata. Preload reads rows, never descriptions.
-    if [[ "${1:-}" == cached ]]; then columns+=', list'; fi
-    if [[ -s "$cache" ]] && state=$(cache_sqlite -readonly -separator $'\n' "$cache" \
-        "SELECT $columns FROM dashboard WHERE identity = '$identity';" 2>/dev/null) &&
-        [[ -n "$state" ]]; then
-        {
-            IFS= read -r age
-            IFS= read -r cached_digest
-            IFS= read -r cached || :
-        } <<< "$state"
-        cached_identity=$identity
-    fi
-}
-
-read_cache_state "${1:-}"
+state=metadata
+if [[ "${1:-}" == cached ]]; then state=list; fi
+cache_read "$state"
 
 configure=false
 if [[ "${1:-}" == cached ]]; then
     configure=true
     if cache_should_show_cached "$age" "$cached_identity" "$identity"; then results="$cached"; else results='{"items":[]}'; fi
 else
-    # Before fetching, a matching entry younger than 30 seconds suppresses a refresh.
     if cache_should_skip_fetch "$age" "$cached_identity" "$identity"; then printf '{}\n'; exit 0; fi
-    search_identity=$identity
-    search_token=$dashboard_auth_token
-    search_failed=false
-    if results=$(GH_TOKEN="$search_token" /bin/bash ../search.sh dashboard "$kind") &&
-        /usr/bin/jq -e '.cache and (.items | type == "array")' <<< "$results" >/dev/null; then
-        :
-    else
-        search_failed=true
-    fi
+    refresh_status=0
+    cache_refresh_search ../search.sh dashboard "$kind" || refresh_status=$?
+    case "$refresh_status" in
+        0) ;;
+        1)
+            if cache_should_reuse_after_failure "$age" "$cached_identity" "$identity" true; then
+                printf '{}\n'
+            else
+                emit_failure
+            fi
+            exit 0
+            ;;
+        *) emit_failure; exit 0 ;;
+    esac
 
-    # After fetching, re-resolve identity before fallback, display, or cache decisions.
-    resolve_dashboard_auth
-    if [[ "$dashboard_auth_resolved" != true || "$identity" != "$search_identity" ]]; then
-        emit_failure
-        exit 0
-    fi
-    if [[ "$search_failed" == true ]]; then
-        if cache_should_reuse_after_failure "$age" "$cached_identity" "$identity" "$search_failed"; then printf '{}\n'; else emit_failure; fi
-        exit 0
-    fi
-
-    digest=$(printf '%s' "$results" | /usr/bin/shasum -a 256)
-    temporary=$(/usr/bin/mktemp "$cache_dir/dashboard.XXXXXX")
-    trap '/bin/rm -f "$temporary" "$temporary-journal"' EXIT
-    # Keep both tables in one snapshot so readers never see a mixed refresh.
-    /usr/bin/jq -r --arg key "$identity" --arg digest "$digest" '
-        def literal: "\u0027" + gsub("\u0027"; "\u0027\u0027") + "\u0027";
-        ([
-            "BEGIN;",
-            "CREATE TABLE dashboard (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);",
-            "CREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;",
-            "INSERT INTO dashboard VALUES (\($key | literal), unixepoch(), \($digest | literal), \({items: [.items[] | del(.body)]} | @json | literal));"
-        ][]),
-        (.items[] | select(.uid) |
-            "INSERT INTO bodies VALUES (\(.uid | literal), \((.body // "") | @json | literal));"),
-        "COMMIT;"
-    ' <<< "$results" | cache_sqlite "$temporary"
-    /bin/mv -f "$temporary" "$cache"
+    digest=$(cache_digest)
+    cache_write "$digest"
     if cache_should_show_cached "$age" "$cached_identity" "$identity" && [[ "$cached_digest" == "$digest" ]]; then
         printf '{}\n'
         exit 0

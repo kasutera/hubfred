@@ -21,21 +21,21 @@ function decision(name, ...args) {
     return result.status;
 }
 
-test('refresh suppression uses a strict 30-second age and the matching identity', () => {
-    assert.equal(decision('cache_should_skip_fetch', 29, 'identity-a', 'identity-a'), 0);
-    assert.equal(decision('cache_should_skip_fetch', 30, 'identity-a', 'identity-a'), 1);
-    assert.equal(decision('cache_should_skip_fetch', 29, 'identity-a', 'identity-b'), 1);
+test('refresh is skipped only below the freshness threshold for the same identity', () => {
+    assert.equal(decision('cache_should_skip_fetch', 'CACHE_FRESH_SECONDS - 1', 'identity-a', 'identity-a'), 0);
+    assert.equal(decision('cache_should_skip_fetch', 'CACHE_FRESH_SECONDS', 'identity-a', 'identity-a'), 1);
+    assert.equal(decision('cache_should_skip_fetch', 'CACHE_FRESH_SECONDS - 1', 'identity-a', 'identity-b'), 1);
 });
 
-test('cached rows are reusable only below 600 seconds for the same identity', () => {
-    assert.equal(decision('cache_should_show_cached', 599, 'identity-a', 'identity-a'), 0);
-    assert.equal(decision('cache_should_show_cached', 600, 'identity-a', 'identity-a'), 1);
-    assert.equal(decision('cache_should_show_cached', 599, 'identity-a', 'identity-b'), 1);
+test('cached rows are reusable only below the stale limit for the same identity', () => {
+    assert.equal(decision('cache_should_show_cached', 'CACHE_STALE_SECONDS - 1', 'identity-a', 'identity-a'), 0);
+    assert.equal(decision('cache_should_show_cached', 'CACHE_STALE_SECONDS', 'identity-a', 'identity-a'), 1);
+    assert.equal(decision('cache_should_show_cached', 'CACHE_STALE_SECONDS - 1', 'identity-a', 'identity-b'), 1);
 });
 
 test('failed refresh fallback requires a matching identity and an actual search failure', () => {
-    assert.equal(decision('cache_should_reuse_after_failure', 599, 'identity-a', 'identity-a', true), 0);
-    assert.equal(decision('cache_should_reuse_after_failure', 600, 'identity-a', 'identity-a', true), 1);
-    assert.equal(decision('cache_should_reuse_after_failure', 599, 'identity-a', 'identity-a', false), 1);
-    assert.equal(decision('cache_should_reuse_after_failure', 599, 'identity-a', 'identity-b', true), 1);
+    assert.equal(decision('cache_should_reuse_after_failure', 'CACHE_STALE_SECONDS - 1', 'identity-a', 'identity-a', true), 0);
+    assert.equal(decision('cache_should_reuse_after_failure', 'CACHE_STALE_SECONDS', 'identity-a', 'identity-a', true), 1);
+    assert.equal(decision('cache_should_reuse_after_failure', 'CACHE_STALE_SECONDS - 1', 'identity-a', 'identity-a', false), 1);
+    assert.equal(decision('cache_should_reuse_after_failure', 'CACHE_STALE_SECONDS - 1', 'identity-a', 'identity-b', true), 1);
 });

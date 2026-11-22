@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
-const { spawnSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -10,6 +10,11 @@ const { test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const loader = path.join(root, 'workflow', 'prs.alfredui', 'load.sh');
+const picker = path.join(root, 'workflow', 'search.sh');
+const [freshLimit, staleLimit] = execFileSync('/bin/bash', [
+    '-ec', 'source "$1"; printf "%s %s" "$CACHE_FRESH_SECONDS" "$CACHE_STALE_SECONDS"',
+    'cache-limits', path.join(path.dirname(loader), 'cache-decisions.sh')
+], {encoding: 'utf8'}).split(' ').map(Number);
 const oldURL = 'https://github.com/owner/repo/pull/1';
 const oldItem = {
     uid: oldURL,
@@ -67,7 +72,8 @@ function sqlite(file, sql) {
 
 function scenario(t, {
     activeToken = 'token-a', cacheToken = 'token-a',
-    searchFails = true, authAfterSearch = null
+    searchFails = true, authAfterSearch = null, mode = 'dashboard',
+    age = Math.floor((freshLimit + staleLimit) / 2)
 } = {}) {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'hubfred-load-'));
     t.after(() => rmSync(directory, {recursive: true, force: true}));
@@ -80,13 +86,14 @@ function scenario(t, {
         }
     }
 
-    const cacheFile = path.join(cacheDir, 'dashboard-v3.sqlite3');
+    const cacheName = mode === 'picker' ? 'pr-picker-v1.sqlite3' : 'dashboard-v3.sqlite3';
+    const cacheFile = path.join(cacheDir, cacheName);
     const {body, ...oldRow} = oldItem;
     const literal = value => `'${value.replaceAll("'", "''")}'`;
     sqlite(cacheFile, `
-        CREATE TABLE dashboard (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);
+        CREATE TABLE ${mode} (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);
         CREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;
-        INSERT INTO dashboard VALUES (${literal(cacheKey(cacheToken))}, unixepoch() - 120, 'old-result-digest',
+        INSERT INTO ${mode} VALUES (${literal(cacheKey(cacheToken))}, unixepoch() - ${age}, 'old-result-digest',
             ${literal(JSON.stringify({items: [oldRow]}))});
         INSERT INTO bodies VALUES (${literal(oldURL)}, ${literal(JSON.stringify(body))});
     `);
@@ -115,11 +122,14 @@ function scenario(t, {
     };
     delete env.GH_TOKEN;
     delete env.GITHUB_TOKEN;
+    delete env.hubfred_refresh_identity;
 
     function run(...args) {
-        const result = spawnSync('/bin/bash', [loader, ...args], {
-            cwd: path.dirname(loader),
-            env,
+        const script = mode === 'picker' ? picker : loader;
+        const command = mode === 'picker' ? [script, 'cached-picker', 'prs'] : [script, ...args];
+        const result = spawnSync('/bin/bash', command, {
+            cwd: path.dirname(script),
+            env: mode === 'picker' ? {...env, ...args[0]} : env,
             encoding: 'utf8',
             maxBuffer: 2 * 1024 * 1024
         });
@@ -149,7 +159,7 @@ function scenario(t, {
             const currentStats = statSync(cacheFile);
             assert.equal(currentStats.ino, originalCacheStats.ino);
             assert.equal(currentStats.mtimeMs, originalCacheStats.mtimeMs);
-            assert.deepEqual(readdirSync(cacheDir).sort(), ['dashboard-v3.sqlite3', 'octicons-v5']);
+            assert.deepEqual(readdirSync(cacheDir).sort(), ['octicons-v5', cacheName].sort());
         }
     };
 }
@@ -201,4 +211,50 @@ test('a successful refresh serves the same rows from the body-free cache', t => 
     assert.equal(persistedList.items[0].body, undefined);
     const persistedBody = JSON.parse(sqlite(testCase.cacheFile, 'SELECT body FROM bodies;'));
     assert.equal(persistedBody, fetchedItem.body);
+});
+
+test('picker displays matching stale rows before searching and replaces them on its one rerun', t => {
+    const testCase = scenario(t, {mode: 'picker', searchFails: false});
+    const first = testCase.run();
+    assert.deepEqual(first.items.map(item => item.uid), [oldURL]);
+    assert.equal(testCase.searchCount(), 0);
+    assert.equal(first.rerun, 0.1);
+    assert.equal(first.cache, undefined);
+
+    const refreshed = testCase.run(first.variables);
+    assert.deepEqual(refreshed.items.map(item => item.uid), [fetchedItem.url]);
+    assert.equal(refreshed.rerun, undefined);
+    assert.equal(testCase.searchCount(), 2);
+    assert.deepEqual(testCase.run(), refreshed);
+    assert.equal(testCase.searchCount(), 2);
+});
+
+test('picker retains a matching stale list on fetch failure without scheduling another rerun', t => {
+    const testCase = scenario(t, {mode: 'picker'});
+    const first = testCase.run();
+    const failed = testCase.run(first.variables);
+    assert.deepEqual(failed.items, first.items);
+    assert.equal(failed.rerun, undefined);
+    assert.equal(testCase.searchCount(), 2);
+    testCase.assertNoCacheWrites();
+});
+
+test('picker does not show stale rows after expiration or a credential change', async t => {
+    for (const [name, options] of [
+        ['expired', {age: staleLimit}],
+        ['other identity before launch', {activeToken: 'token-b'}],
+        ['identity changed during refresh', {authAfterSearch: 'token-b', searchFails: false}]
+    ]) {
+        await t.test(name, t => {
+            const testCase = scenario(t, {mode: 'picker', ...options});
+            const first = testCase.run();
+            const output = options.authAfterSearch ? testCase.run(first.variables) : first;
+            assert.equal(output.rerun, undefined);
+            assert.equal(output.items.length, 1);
+            assert.equal(output.items[0].valid, false);
+            assert.match(output.items[0].title, /^Could not load GitHub /);
+            assert.equal(testCase.searchCount(), 2);
+            testCase.assertNoCacheWrites();
+        });
+    }
 });
