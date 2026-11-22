@@ -3,7 +3,6 @@ set -euo pipefail
 
 cd -- "$(dirname -- "$0")"
 source ./cache.sh
-source ./cache-decisions.sh
 
 case "${dashboard_kind:-prs}" in
     prs)
@@ -39,58 +38,34 @@ if [[ "$dashboard_auth_resolved" != true ]]; then
     exit 0
 fi
 
-umask 077
-/bin/mkdir -p "$cache_dir"
-
-read_cache_state() {
-    age=600
-    cached=
-    cached_identity=
-    if [[ -s "$cache" ]]; then
-        cached=$(/usr/bin/jq -c --arg key "$identity" 'select(.key == $key) | .results' "$cache") || cached=
-        if [[ -n "$cached" ]]; then
-            cached_identity=$identity
-            mtime=$(/usr/bin/stat -f %m "$cache")
-            age=$(( $(/bin/date +%s) - mtime ))
-        fi
-    fi
-}
-
-read_cache_state
+state=metadata
+if [[ "${1:-}" == cached ]]; then state=list; fi
+cache_read "$state"
 
 configure=false
 if [[ "${1:-}" == cached ]]; then
     configure=true
     if cache_should_show_cached "$age" "$cached_identity" "$identity"; then results="$cached"; else results='{"items":[]}'; fi
 else
-    # Before fetching, a matching entry younger than 30 seconds suppresses a refresh.
     if cache_should_skip_fetch "$age" "$cached_identity" "$identity"; then printf '{}\n'; exit 0; fi
-    search_identity=$identity
-    search_token=$dashboard_auth_token
-    search_failed=false
-    if results=$(GH_TOKEN="$search_token" /bin/bash ../search.sh dashboard "$kind") &&
-        /usr/bin/jq -e '.cache and (.items | type == "array")' <<< "$results" >/dev/null; then
-        :
-    else
-        search_failed=true
-    fi
+    refresh_status=0
+    cache_refresh_search ../search.sh dashboard "$kind" || refresh_status=$?
+    case "$refresh_status" in
+        0) ;;
+        1)
+            if cache_should_reuse_after_failure "$age" "$cached_identity" "$identity" true; then
+                printf '{}\n'
+            else
+                emit_failure
+            fi
+            exit 0
+            ;;
+        *) emit_failure; exit 0 ;;
+    esac
 
-    # After fetching, re-resolve identity before fallback, display, or cache decisions.
-    resolve_dashboard_auth
-    if [[ "$dashboard_auth_resolved" != true || "$identity" != "$search_identity" ]]; then
-        emit_failure
-        exit 0
-    fi
-    if [[ "$search_failed" == true ]]; then
-        if cache_should_reuse_after_failure "$age" "$cached_identity" "$identity" "$search_failed"; then printf '{}\n'; else emit_failure; fi
-        exit 0
-    fi
-
-    temporary=$(/usr/bin/mktemp "$cache_dir/dashboard.XXXXXX")
-    trap '/bin/rm -f "$temporary"' EXIT
-    /usr/bin/jq -c --arg key "$identity" '{key: $key, results: .}' <<< "$results" > "$temporary"
-    /bin/mv -f "$temporary" "$cache"
-    if cache_should_show_cached "$age" "$cached_identity" "$identity" && [[ "$cached" == "$(/usr/bin/jq -c . <<< "$results")" ]]; then
+    digest=$(cache_digest)
+    cache_write "$digest"
+    if cache_should_show_cached "$age" "$cached_identity" "$identity" && [[ "$cached_digest" == "$digest" ]]; then
         printf '{}\n'
         exit 0
     fi

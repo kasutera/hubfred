@@ -24,4 +24,3 @@ def local_timestamp:
 | if .items == [] then
     {items: [{title: "No matching open \($noun)", subtitle: "No matching items on github.com", valid: false}]}
   else . end
-| . + {cache: {seconds: 30, loosereload: true}, skipknowledge: true}

@@ -2,14 +2,19 @@
 
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
-const { spawnSync } = require('node:child_process');
-const { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } = require('node:fs');
+const { execFileSync, spawnSync } = require('node:child_process');
+const { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const loader = path.join(root, 'workflow', 'prs.alfredui', 'load.sh');
+const picker = path.join(root, 'workflow', 'search.sh');
+const [freshLimit, staleLimit] = execFileSync('/bin/bash', [
+    '-ec', 'source "$1"; printf "%s %s" "$CACHE_FRESH_SECONDS" "$CACHE_STALE_SECONDS"',
+    'cache-limits', path.join(path.dirname(loader), 'cache-decisions.sh')
+], {encoding: 'utf8'}).split(' ').map(Number);
 const oldURL = 'https://github.com/owner/repo/pull/1';
 const oldItem = {
     uid: oldURL,
@@ -30,7 +35,7 @@ const fetchedItem = {
     updatedAt: '2026-01-20T12:00:00Z',
     url: 'https://github.com/owner/repo/pull/99',
     isDraft: false,
-    body: 'New fetched preview'
+    body: "New fetched preview: 日本語, 'quotes' and semi;colons.\n\nSecond paragraph."
 };
 const mockGh = `
 gh() {
@@ -58,9 +63,17 @@ function cacheKey(token) {
     return `${hash}  -`;
 }
 
+function sqlite(file, sql) {
+    const result = spawnSync('/usr/bin/sqlite3', ['-batch', '-bail', '-init', '/dev/null', file, sql],
+        {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+}
+
 function scenario(t, {
     activeToken = 'token-a', cacheToken = 'token-a',
-    searchFails = true, authAfterSearch = null
+    searchFails = true, authAfterSearch = null, mode = 'dashboard',
+    age = Math.floor((freshLimit + staleLimit) / 2)
 } = {}) {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'hubfred-load-'));
     t.after(() => rmSync(directory, {recursive: true, force: true}));
@@ -73,10 +86,17 @@ function scenario(t, {
         }
     }
 
-    const cacheFile = path.join(cacheDir, 'dashboard-v2.json');
-    writeFileSync(cacheFile, JSON.stringify({key: cacheKey(cacheToken), results: {items: [oldItem]}}));
-    const cachedAt = Math.floor(Date.now() / 1000) - 120;
-    utimesSync(cacheFile, cachedAt, cachedAt);
+    const cacheName = mode === 'picker' ? 'pr-picker-v1.sqlite3' : 'dashboard-v3.sqlite3';
+    const cacheFile = path.join(cacheDir, cacheName);
+    const {body, ...oldRow} = oldItem;
+    const literal = value => `'${value.replaceAll("'", "''")}'`;
+    sqlite(cacheFile, `
+        CREATE TABLE ${mode} (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);
+        CREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;
+        INSERT INTO ${mode} VALUES (${literal(cacheKey(cacheToken))}, unixepoch() - ${age}, 'old-result-digest',
+            ${literal(JSON.stringify({items: [oldRow]}))});
+        INSERT INTO bodies VALUES (${literal(oldURL)}, ${literal(JSON.stringify(body))});
+    `);
     const originalCache = readFileSync(cacheFile);
     const originalCacheStats = statSync(cacheFile);
     const searchResults = path.join(directory, 'search-results.json');
@@ -102,11 +122,14 @@ function scenario(t, {
     };
     delete env.GH_TOKEN;
     delete env.GITHUB_TOKEN;
+    delete env.hubfred_refresh_identity;
 
-    function run() {
-        const result = spawnSync('/bin/bash', [loader], {
-            cwd: path.dirname(loader),
-            env,
+    function run(...args) {
+        const script = mode === 'picker' ? picker : loader;
+        const command = mode === 'picker' ? [script, 'cached-picker', 'prs'] : [script, ...args];
+        const result = spawnSync('/bin/bash', command, {
+            cwd: path.dirname(script),
+            env: mode === 'picker' ? {...env, ...args[0]} : env,
             encoding: 'utf8',
             maxBuffer: 2 * 1024 * 1024
         });
@@ -136,7 +159,7 @@ function scenario(t, {
             const currentStats = statSync(cacheFile);
             assert.equal(currentStats.ino, originalCacheStats.ino);
             assert.equal(currentStats.mtimeMs, originalCacheStats.mtimeMs);
-            assert.deepEqual(readdirSync(cacheDir).sort(), ['dashboard-v2.json', 'octicons-v5']);
+            assert.deepEqual(readdirSync(cacheDir).sort(), ['octicons-v5', cacheName].sort());
         }
     };
 }
@@ -157,6 +180,7 @@ test('same-auth failed refresh preserves the cached display', t => {
 
 test('does not show older cached data after switching to another auth identity', t => {
     const testCase = scenario(t, {activeToken: 'token-b', cacheToken: 'token-a'});
+    assert.equal(testCase.run('cached').update.ids.prs, undefined);
     assertRefreshFailure(testCase.run());
     assert.equal(testCase.searchCount(), 2);
     testCase.assertNoCacheWrites();
@@ -170,7 +194,7 @@ test('search fixture auth change suppresses fetched results and cache writes and
     testCase.assertNoCacheWrites();
 });
 
-test('unchanged auth emits and caches the same successful search results', t => {
+test('a successful refresh serves the same rows from the body-free cache', t => {
     const testCase = scenario(t, {searchFails: false});
     const output = testCase.run();
     const rows = output.update.ids.prs.data.src;
@@ -180,8 +204,57 @@ test('unchanged auth emits and caches the same successful search results', t => 
     assert.equal(testCase.currentToken(), 'token-a');
     assert.equal(testCase.searchCount(), 2);
 
-    const persisted = JSON.parse(readFileSync(testCase.cacheFile, 'utf8'));
-    assert.equal(persisted.key, cacheKey('token-a'));
-    assert.equal(persisted.results.items.length, 1);
-    assert.equal(persisted.results.items[0].title, fetchedItem.title);
+    assert.deepEqual(testCase.run('cached').update.ids.prs.data.src, rows);
+    assert.deepEqual(testCase.run('refresh'), {});
+    assert.equal(testCase.searchCount(), 2);
+    const persistedList = JSON.parse(sqlite(testCase.cacheFile, 'SELECT list FROM dashboard;'));
+    assert.equal(persistedList.items[0].body, undefined);
+    const persistedBody = JSON.parse(sqlite(testCase.cacheFile, 'SELECT body FROM bodies;'));
+    assert.equal(persistedBody, fetchedItem.body);
+});
+
+test('picker displays matching stale rows before searching and replaces them on its one rerun', t => {
+    const testCase = scenario(t, {mode: 'picker', searchFails: false});
+    const first = testCase.run();
+    assert.deepEqual(first.items.map(item => item.uid), [oldURL]);
+    assert.equal(testCase.searchCount(), 0);
+    assert.equal(first.rerun, 0.1);
+    assert.equal(first.cache, undefined);
+
+    const refreshed = testCase.run(first.variables);
+    assert.deepEqual(refreshed.items.map(item => item.uid), [fetchedItem.url]);
+    assert.equal(refreshed.rerun, undefined);
+    assert.equal(testCase.searchCount(), 2);
+    assert.deepEqual(testCase.run(), refreshed);
+    assert.equal(testCase.searchCount(), 2);
+});
+
+test('picker retains a matching stale list on fetch failure without scheduling another rerun', t => {
+    const testCase = scenario(t, {mode: 'picker'});
+    const first = testCase.run();
+    const failed = testCase.run(first.variables);
+    assert.deepEqual(failed.items, first.items);
+    assert.equal(failed.rerun, undefined);
+    assert.equal(testCase.searchCount(), 2);
+    testCase.assertNoCacheWrites();
+});
+
+test('picker does not show stale rows after expiration or a credential change', async t => {
+    for (const [name, options] of [
+        ['expired', {age: staleLimit}],
+        ['other identity before launch', {activeToken: 'token-b'}],
+        ['identity changed during refresh', {authAfterSearch: 'token-b', searchFails: false}]
+    ]) {
+        await t.test(name, t => {
+            const testCase = scenario(t, {mode: 'picker', ...options});
+            const first = testCase.run();
+            const output = options.authAfterSearch ? testCase.run(first.variables) : first;
+            assert.equal(output.rerun, undefined);
+            assert.equal(output.items.length, 1);
+            assert.equal(output.items[0].valid, false);
+            assert.match(output.items[0].title, /^Could not load GitHub /);
+            assert.equal(testCase.searchCount(), 2);
+            testCase.assertNoCacheWrites();
+        });
+    }
 });

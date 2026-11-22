@@ -42,7 +42,7 @@ During capture, installed production workflows under the current or legacy Bundl
 
 ## Cache Strategy
 
-For current cache behavior and the recommended direction, see [Cache Strategy](docs/cache-strategy.md).
+See [Cache Strategy](docs/cache-strategy.md) for cache performance and security behavior.
 
 ## CI and Releases
 
