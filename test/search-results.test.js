@@ -11,12 +11,12 @@ const root = path.resolve(__dirname, '..');
 const formatter = path.join(root, 'workflow', 'search-results.jq');
 const updatedAt = day => `2026-01-${String(day).padStart(2, '0')}T12:00:00Z`;
 
-function item({number, repository, day}) {
+function item({number, repository, day, title = `Work item ${repository}#${number}`}) {
     return {
         author: {login: 'reader'},
         number,
         repository: {nameWithOwner: repository},
-        title: `Work item ${repository}#${number}`,
+        title,
         updatedAt: updatedAt(day),
         url: `https://github.com/${repository}/pull/${number}`,
         isDraft: false
@@ -36,7 +36,7 @@ test('merges by URL, keeps participation reasons, sorts by update time, and limi
         {repository: 'owner/repo-a', number: 4, day: 11},
         {repository: 'owner/repo-b', number: 4, day: 4},
         {repository: 'owner/repo-a', number: 5, day: 10},
-        {repository: 'owner/repo-b', number: 5, day: 3},
+        {repository: 'example-org/widget-builder', number: 5, day: 3, title: 'Fix controls'},
         {repository: 'owner/repo-a', number: 6, day: 6},
         {repository: 'owner/repo-b', number: 6, day: 8}
     ];
@@ -53,7 +53,6 @@ test('merges by URL, keeps participation reasons, sorts by update time, and limi
         '--argjson', 'color_count', '6',
         '--argjson', 'search_limit', '10',
         '--arg', 'mode', 'picker',
-        '--arg', 'kind', 'prs',
         '--arg', 'noun', 'PRs',
         '--arg', 'reasons', 'Authored|Review requested',
         '-f', formatter,
@@ -74,10 +73,14 @@ test('merges by URL, keeps participation reasons, sorts by update time, and limi
         'https://github.com/owner/repo-a/pull/6',
         'https://github.com/owner/repo-a/pull/1',
         'https://github.com/owner/repo-b/pull/4',
-        'https://github.com/owner/repo-b/pull/5'
+        'https://github.com/example-org/widget-builder/pull/5'
     ]);
     assert.equal(new Set(output.items.map(row => row.uid)).size, 10);
     assert.equal(output.items.filter(row => row.uid.endsWith('/pull/1')).length, 2);
     assert.equal(output.items[0].title, 'Work item owner/repo-b#1');
     assert.ok(output.items[0].subtitle.endsWith('Authored · Review requested'));
+    // Alfred's start-or-whitespace mode needs a word boundary before the repository name.
+    assert.deepEqual(output.items.filter(row => /(?:^|\s)widget/i.test(row.match)).map(row => row.uid), [
+        'https://github.com/example-org/widget-builder/pull/5'
+    ]);
 });

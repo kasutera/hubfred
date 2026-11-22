@@ -16,7 +16,8 @@ def local_timestamp:
     | (if .url | test("/issues/[0-9]+$") then "issue" elif .isDraft then "draft" else "ready" end) as $state
     | {title,
        subtitle: "\($repo)#\(.number) · \(.author.login) · \(.updatedAt | local_timestamp) · \(.reasons | join(" · "))\(if .isDraft then " · Draft" else "" end)",
-       match: "\(.title) \($repo) #\(.number) \(.number)",
+       match: ("\(.title) \($repo) #\(.number) \(.number)"
+               + if $mode == "picker" then " \($repo | split("/") | last)" else "" end),
        uid: .url,
        arg: .url,
        icon: {path: "\($icon_dir)/\($repo | repo_color)-\($state).png"}}

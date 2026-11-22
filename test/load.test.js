@@ -73,7 +73,7 @@ function sqlite(file, sql) {
 function scenario(t, {
     activeToken = 'token-a', cacheToken = 'token-a',
     searchFails = true, authAfterSearch = null, mode = 'dashboard',
-    age = Math.floor((freshLimit + staleLimit) / 2)
+    age = Math.floor((freshLimit + staleLimit) / 2), cachedRows
 } = {}) {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'hubfred-load-'));
     t.after(() => rmSync(directory, {recursive: true, force: true}));
@@ -86,7 +86,7 @@ function scenario(t, {
         }
     }
 
-    const cacheName = mode === 'picker' ? 'pr-picker-v1.sqlite3' : 'dashboard-v3.sqlite3';
+    const cacheName = mode === 'picker' ? 'pr-picker-v2.sqlite3' : 'dashboard-v3.sqlite3';
     const cacheFile = path.join(cacheDir, cacheName);
     const {body, ...oldRow} = oldItem;
     const literal = value => `'${value.replaceAll("'", "''")}'`;
@@ -94,7 +94,7 @@ function scenario(t, {
         CREATE TABLE ${mode} (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);
         CREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;
         INSERT INTO ${mode} VALUES (${literal(cacheKey(cacheToken))}, unixepoch() - ${age}, 'old-result-digest',
-            ${literal(JSON.stringify({items: [oldRow]}))});
+            ${literal(JSON.stringify({items: cachedRows ?? [oldRow]}))});
         INSERT INTO bodies VALUES (${literal(oldURL)}, ${literal(JSON.stringify(body))});
     `);
     const originalCache = readFileSync(cacheFile);
@@ -123,13 +123,12 @@ function scenario(t, {
     delete env.GH_TOKEN;
     delete env.GITHUB_TOKEN;
     delete env.hubfred_refresh_identity;
+    delete env.hubfred_refresh_mode;
 
-    function run(...args) {
-        const script = mode === 'picker' ? picker : loader;
-        const command = mode === 'picker' ? [script, 'cached-picker', 'prs'] : [script, ...args];
-        const result = spawnSync('/bin/bash', command, {
+    function runJSON(script, args, extraEnv) {
+        const result = spawnSync('/bin/bash', [script, ...args], {
             cwd: path.dirname(script),
-            env: mode === 'picker' ? {...env, ...args[0]} : env,
+            env: {...env, ...extraEnv},
             encoding: 'utf8',
             maxBuffer: 2 * 1024 * 1024
         });
@@ -137,12 +136,17 @@ function scenario(t, {
         return JSON.parse(result.stdout);
     }
 
+    function runPicker(query = '', variables) {
+        return runJSON(picker, ['cached-picker', 'prs', query], variables);
+    }
+
     return {
         cacheDir,
         cacheFile,
         originalCache,
         originalCacheStats,
-        run,
+        run: mode === 'picker' ? variables => runPicker('', variables) : (...args) => runJSON(loader, args),
+        runPicker,
         currentToken() {
             return readFileSync(tokenFile, 'utf8');
         },
@@ -257,4 +261,33 @@ test('picker does not show stale rows after expiration or a credential change', 
             testCase.assertNoCacheWrites();
         });
     }
+});
+
+test('picker narrows the dashboard list before taking the latest ten', t => {
+    const row = (index, repository) => {
+        const url = `https://github.com/example-org/${repository}/pull/${index}`;
+        return {...oldItem, uid: url, arg: url, match: `Fix controls example-org/${repository} #${index}`};
+    };
+    const matches = Array.from({length: 12}, (_, index) => row(30 - index, 'widget-builder'));
+    const unrelated = Array.from({length: 12}, (_, index) => row(50 - index, 'another-repo'));
+    const testCase = scenario(t, {age: 0, cachedRows: [...unrelated, ...matches]});
+    const output = testCase.runPicker('WARN'); // No match must not trigger a refresh of a fresh list.
+    assert.equal(output.items[0].valid, false);
+    assert.deepEqual(testCase.runPicker('Widget controls').items.map(item => item.uid),
+        matches.slice(0, 10).map(item => item.uid));
+    assert.equal(testCase.runPicker('widget.*').items[0].valid, false);
+    assert.equal(testCase.searchCount(), 0);
+});
+
+test('filtered picker refreshes the broad snapshot without using another credential’s rows', t => {
+    const testCase = scenario(t, {activeToken: 'token-b', searchFails: false});
+    const waiting = testCase.runPicker('New');
+    assert.equal(waiting.items[0].valid, false);
+    assert.equal(testCase.searchCount(), 0);
+    const found = testCase.runPicker('New', waiting.variables);
+    assert.deepEqual(found.items.map(item => item.uid), [fetchedItem.url]);
+    assert.equal(testCase.searchCount(), 2);
+    const loaded = testCase.run('cached').update.ids.prs.data.src;
+    assert.deepEqual(loaded.map(row => row.uid), [fetchedItem.url]);
+    assert.equal(testCase.searchCount(), 2);
 });

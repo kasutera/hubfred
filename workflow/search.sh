@@ -13,8 +13,38 @@ message() {
         '{items: [{title: $title, subtitle: $subtitle, valid: false}]}'
 }
 
+emit_picker() {
+    /usr/bin/jq --arg query "$query" --argjson rerun "$rerun" --arg key "$identity" --arg mode "$cache_mode" '
+        def literal_regex:
+            split("") | map(. as $c | if "\\.^$|?*+()[]{}" | contains($c) then "\\" + $c else $c end) | join("");
+        if $query == "" then .
+        else
+            [$query | scan("\\S+") | "(?:^|\\s)" + literal_regex] as $terms
+            | {items: [limit(10; .items[] | select(.arg)
+                | (.match + " " + (.uid | split("/")[4])) as $text
+                | select(all($terms[]; . as $term | $text | test($term; "i")))
+                | {title, subtitle, uid, arg, icon})]}
+            | if .items == [] then {items: [{
+                title: (if $rerun then "Searching GitHub…" else "No matching open items" end),
+                valid: false
+            }]} else . end
+        end
+        | . + {skipknowledge: true}
+        | if $rerun then . + {rerun: (if $query == "" then 0.1 else 0.3 end), variables: {
+            hubfred_refresh_identity: $key, hubfred_refresh_mode: $mode
+        }} else . end
+    ' <<< "$results"
+}
+
 if [[ "$mode" == cached-picker ]]; then
     cache_mode=picker
+    query=${3:-}
+    if [[ "$query" =~ ^[[:space:]]*$ ]]; then
+        query=
+    else
+        # Filter before taking ten, using the same broad snapshot as the dashboard.
+        cache_mode=dashboard
+    fi
     cache_kind=$kind
     source ./prs.alfredui/cache.sh
 
@@ -30,21 +60,30 @@ if [[ "$mode" == cached-picker ]]; then
 
     cache_read list
     rerun=false
+    refreshing=false
+    if [[ "${hubfred_refresh_mode:-}" == "$cache_mode" ]]; then refreshing=true; fi
     if cache_should_skip_fetch "$age" "$cached_identity" "$identity"; then
         results=$cached
-    elif [[ -z "${hubfred_refresh_identity:-}" ]] && cache_should_show_cached "$age" "$cached_identity" "$identity"; then
+    elif [[ "$refreshing" == false ]] && cache_should_show_cached "$age" "$cached_identity" "$identity"; then
         # Alfred keeps these rows visible while the one-shot rerun fetches replacements.
         results=$cached
         rerun=true
+    elif [[ "$refreshing" == false && -n "$query" ]]; then
+        results='{"items":[]}'
+        rerun=true
     else
         refresh_status=0
-        cache_refresh_search ./search.sh picker "$kind" || refresh_status=$?
+        cache_refresh_search ./search.sh "$cache_mode" "$kind" || refresh_status=$?
         case "$refresh_status" in
-            0) cache_write '' ;;
+            0)
+                digest=
+                if [[ "$cache_mode" == dashboard ]]; then digest=$(cache_digest); fi
+                cache_write "$digest"
+                ;;
             1)
                 if cache_should_reuse_after_failure "$age" "$cached_identity" "$identity" true; then
                     results=$cached
-                elif [[ -z "$results" ]]; then
+                elif [[ -n "$query" || -z "$results" ]]; then
                     message 'Could not load GitHub results' 'Check the network and your GitHub CLI login.'
                     exit 0
                 fi
@@ -52,10 +91,7 @@ if [[ "$mode" == cached-picker ]]; then
             *) message 'Could not load GitHub results' 'GitHub CLI login changed. Reopen the picker.'; exit 0 ;;
         esac
     fi
-    /usr/bin/jq --argjson rerun "$rerun" --arg key "$identity" '
-        . + {skipknowledge: true}
-        | if $rerun then . + {rerun: 0.1, variables: {hubfred_refresh_identity: $key}} else . end
-    ' <<< "$results"
+    emit_picker
     exit 0
 fi
 

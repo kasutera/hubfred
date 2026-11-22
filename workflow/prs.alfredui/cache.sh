@@ -4,9 +4,9 @@ case "$cache_table:${cache_kind:-${dashboard_kind:-prs}}" in
     dashboard:prs) cache_name=dashboard-v3.sqlite3 ;;
     dashboard:issues) cache_name=issues-dashboard-v3.sqlite3 ;;
     dashboard:all) cache_name=github-dashboard-v1.sqlite3 ;;
-    picker:prs) cache_name=pr-picker-v1.sqlite3 ;;
-    picker:issues) cache_name=issue-picker-v1.sqlite3 ;;
-    picker:all) cache_name=github-picker-v1.sqlite3 ;;
+    picker:prs) cache_name=pr-picker-v2.sqlite3 ;;
+    picker:issues) cache_name=issue-picker-v2.sqlite3 ;;
+    picker:all) cache_name=github-picker-v2.sqlite3 ;;
     *) return 2 ;;
 esac
 cache_dir="${alfred_workflow_cache:-$HOME/Library/Caches/jp.kasutera.hubfred}"
