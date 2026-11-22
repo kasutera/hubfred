@@ -2,42 +2,54 @@
 
 Find and open the GitHub pull requests and issues that involve you, right from Alfred.
 
-## Install
+## Setup
 
-[Download the latest release](../../releases/latest) and open the `.alfredworkflow` file in Alfred. Requires macOS 15 or later, Alfred 6 with Powerpack, and [GitHub CLI](https://cli.github.com/) signed in to github.com.
+Requires macOS 15 or later and Alfred 6 with Powerpack.
 
-## Pull Requests
+In Terminal, sign in to GitHub.com:
 
-> Type `pr` followed by a space to find open pull requests you authored or were asked to review.
+```sh
+gh auth login --hostname github.com
+```
+
+## Usage
+
+Search the open pull requests and issues that involve you via the `gh` keyword.
+
+![The combined picker showing open pull requests and issues in update order.](docs/screenshots/github-picker.png)
+
+Browse both kinds of items, filter by type, involvement, or label, and preview descriptions via the `ghs` keyword.
+
+![The combined dashboard showing pull requests and issues alongside a Markdown preview.](docs/screenshots/github-dashboard.png)
+
+### Pull Requests
+
+Find open pull requests you authored or were asked to review via the `pr` keyword.
 
 ![Alfred's PR picker showing drafts and review requests, with icons colored by repository.](docs/screenshots/picker.png)
 
-> Type `prs` and press Enter to filter by involvement and preview the selected PR.
+Filter open pull requests by involvement and preview the selected description via the `prs` keyword.
 
 ![The PR dashboard showing the selected draft's Markdown description alongside the list.](docs/screenshots/pr-dashboard.png)
 
-## Issues
+### Issues
 
-> Type `is` followed by a space to find open issues you were assigned to, authored, were mentioned in, or commented on.
+Find open issues you were assigned to, authored, were mentioned in, or commented on via the `is` keyword.
 
 ![Alfred's Issue picker showing results for all four kinds of involvement.](docs/screenshots/issue-picker.png)
 
-> Type `iss` and press Enter to filter by involvement or label and preview the selected issue.
+Filter open issues by involvement or label and preview the selected description via the `iss` keyword.
 
 ![The Issue dashboard showing a labeled list and a Markdown description with a checklist.](docs/screenshots/dashboard.png)
 
-## Pull Requests and Issues
+For a picker (`gh`, `pr`, or `is`), type a space after the keyword. Pickers show up to 10 results, newest updates first. With a query, they filter the corresponding dashboard results before taking the latest 10 matches. If the dashboard cache is missing or stale, the workflow refreshes it from GitHub.
 
-> Type `gh` followed by a space to find both pull requests and issues in one picker.
->
-> ![The combined picker showing open pull requests and issues in update order.](docs/screenshots/github-picker.png)
+For a dashboard (`ghs`, `prs`, or `iss`), press <kbd>↩</kbd> after typing the keyword. Dashboards show all items returned by their searches.
 
-> Type `ghs` and press Enter to open the combined dashboard. Filter by item type, involvement, or label and preview either kind of item.
->
-> ![The combined dashboard showing pull requests and issues alongside a Markdown preview.](docs/screenshots/github-dashboard.png)
+Search by title, repository, or number. In pickers, you can omit the owner and enter the start of a repository name. Press <kbd>↩</kbd> on a result to open it on GitHub.
 
-Pickers show up to 10 items, most recently updated first. With a query, they filter the broader dashboard results before taking the latest 10 matches. If the dashboard cache is missing or stale, the workflow refreshes it from GitHub. Dashboards show all items returned by their searches.
+## Install from GitHub
 
-Search by title, repository, or number. In a picker, a repository name can also be matched by its prefix without the owner (for example, `gh widget` matches `example-org/widget-builder`). Press Enter to open the selected item on GitHub.
+Install [GitHub CLI](https://cli.github.com/), [download the latest release](https://github.com/kasutera/hubfred/releases/latest), and open the `.alfredworkflow` file in Alfred.
 
 See [MAINTAINER.md](MAINTAINER.md) for development, screenshots, and releases.
