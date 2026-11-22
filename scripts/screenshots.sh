@@ -111,11 +111,11 @@ BASH
     | .objects |= map(select(.uid as $id | $unused | index($id) | not))
     | .connections |= with_entries(select(.value[0].destinationuid as $id | $unused | index($id) | not))
     | .uidata |= with_entries(select(.key as $id | $unused | index($id) | not))
-    | (.objects[] | select(.config.keyword == "pr" or .config.keyword == "is").config.keyword) += "-demo"
-    | (.objects[] | select(.config.keyword == "prs" or .config.keyword == "iss")) |= (
+    | (.objects[] | select(.config.keyword == "pr" or .config.keyword == "is" or .config.keyword == "gh").config.keyword) += "-demo"
+    | (.objects[] | select(.config.keyword == "prs" or .config.keyword == "iss" or .config.keyword == "ghs")) |= (
         .config.keyword as $keyword
         | .type = "alfred.workflow.trigger.external"
-        | .config = {triggerid: (if $keyword == "prs" then "pr-dashboard" else "issue-dashboard" end), availableviaurlhandler: false}
+        | .config = {triggerid: ({prs: "pr-dashboard", iss: "issue-dashboard", ghs: "github-dashboard"}[$keyword]), availableviaurlhandler: false}
     )
 ' > "$work/info.json"
 /usr/bin/plutil -convert xml1 -o "$payload/info.plist" "$work/info.json"
@@ -156,7 +156,7 @@ for ((index = 0; index < production_count; index++)); do
     /bin/cp -p "${production_paths[$index]}" "$production_backup"
     production_backups[$index]=$production_backup
     /usr/bin/plutil -convert json -o - "$production_backup" | /usr/bin/jq '
-        (.objects[] | select(.config.keyword == "pr" or .config.keyword == "is").config.keyword)
+        (.objects[] | select(.config.keyword == "pr" or .config.keyword == "is" or .config.keyword == "gh").config.keyword)
         |= ("hubfred-capture-disabled-" + .)
     ' > "$work/production-$index.json"
 done
@@ -169,7 +169,7 @@ if ((production_count > 0)); then
 fi
 
 /usr/bin/plutil -convert json -o - "$payload/info.plist" | /usr/bin/jq '
-    (.objects[] | select(.config.keyword == "pr-demo" or .config.keyword == "is-demo").config.keyword)
+    (.objects[] | select(.config.keyword == "pr-demo" or .config.keyword == "is-demo" or .config.keyword == "gh-demo").config.keyword)
     |= rtrimstr("-demo")
 ' > "$work/demo.json"
 /usr/bin/plutil -convert xml1 -o "$installed/info.plist" "$work/demo.json"
@@ -177,4 +177,4 @@ reload "$bundle"
 capture_started=true
 /usr/bin/swift scripts/screenshots/capture.swift "$work/images"
 /bin/mkdir -p docs/screenshots
-/bin/cp "$work/images/"{picker,pr-dashboard,issue-picker,dashboard}.png docs/screenshots/
+/bin/cp "$work/images/"{picker,pr-dashboard,issue-picker,dashboard,github-picker,github-dashboard}.png docs/screenshots/

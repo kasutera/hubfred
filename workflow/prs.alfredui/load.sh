@@ -13,6 +13,10 @@ case "${dashboard_kind:-prs}" in
         kind=issues noun=Issues
         relations='Assigned|Authored|Mentioned|Commented'
         ;;
+    all)
+        kind=all noun='PRs and issues'
+        relations='Assigned|Authored|Mentioned|Commented|Review requested'
+        ;;
     *) exit 2 ;;
 esac
 emit_failure() {
@@ -71,13 +75,14 @@ else
     fi
 fi
 
-/usr/bin/jq --arg noun "$noun" --arg relations "$relations" --argjson configure "$configure" '
+/usr/bin/jq --arg noun "$noun" --arg kind "$kind" --arg relations "$relations" --argjson configure "$configure" '
     def token: "relation" + (ascii_downcase | gsub(" "; ""));
 
     [.items[] | select(.arg)] as $rows
     | {update: {ids: (
         (if $configure then {category: {items: (
             [{text: "All \($noun)", value: "allitems"}] +
+            (if $kind == "all" then [{text: "PRs", value: "kindpr"}, {text: "Issues", value: "kindissue"}] else [] end) +
             ($relations | split("|") | map({text: ., value: token}))
         ), selected: "allitems"}} else {} end)
         + (if $configure and .items == [] then {} else {
@@ -86,7 +91,7 @@ fi
             "title.text": .title,
             "subtitle.text": ((.labels // [] | if length > 0 then "Labels: \(join(", ")) · " else "" end) + .subtitle),
             "glyph.image": {type: "file", src: .icon.path},
-            match: (["allitems", (.reasons[] | token), .match, (.labels[]?)] | join(" "))
+            match: (["allitems", (if $kind == "all" then .kind else empty end), (.reasons[] | token), .match, (.labels[]?)] | join(" "))
         })), filter: {type: "basic", args: "match", match: "{value:category.selected.value} {value:query.text}", matchmode: "wordmatchanyorder"}}}
         } end)
     )}}
