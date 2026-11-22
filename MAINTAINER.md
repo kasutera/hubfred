@@ -33,7 +33,7 @@ Captures use synthetic data from `scripts/screenshots/fixtures.json` and a fixed
 
 Only one capture can run against the same Alfred workflows directory at a time, even when it is reached through different paths. A competing capture fails immediately without touching settings. The lock is held from before keyword backup until restoration and window dismissal are complete.
 
-During capture, installed production workflows under the current or legacy Bundle IDs have their `pr`, `is`, and `gh` picker keywords temporarily backed up and disabled, and the screenshot workflow responds to those keywords. They are restored on normal completion, failure, or ordinary interruption. After capture starts, the command activates Finder only if a visible Alfred capture window remains; Alfred is never quit. The theme and Alfred preference files are not modified. If workflow restoration fails, the command prints the recovery-file location. Do not edit Alfred workflow settings during capture.
+During capture, the script backs up installed production workflows under the current or legacy Bundle IDs and temporarily disables their keyword inputs, including customized keywords. The screenshot workflow uses the default picker keywords during capture. The original workflow settings are restored on normal completion, failure, or ordinary interruption. After capture starts, the command activates Finder only if a visible Alfred capture window remains; Alfred is never quit. The theme and Alfred preference files are not modified. If workflow restoration fails, the command prints the recovery-file location. Do not edit Alfred workflow settings during capture.
 
 ## Runtime Behavior
 
