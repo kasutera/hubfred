@@ -29,8 +29,12 @@ Find and open the GitHub pull requests and issues that involve you, right from A
 ## Pull Requests and Issues
 
 > Type `gh` followed by a space to find both pull requests and issues in one picker.
+>
+> ![The combined picker showing open pull requests and issues in update order.](docs/screenshots/github-picker.png)
 
 > Type `ghs` and press Enter to open the combined dashboard. Filter by item type, involvement, or label and preview either kind of item.
+>
+> ![The combined dashboard showing pull requests and issues alongside a Markdown preview.](docs/screenshots/github-dashboard.png)
 
 Pickers show up to 10 items total, most recently updated first; typing a search filters that list. Dashboards show all items returned by their searches.
 

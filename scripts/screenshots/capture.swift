@@ -48,7 +48,8 @@ guard arguments.count == 1 else {
 }
 let output = URL(fileURLWithPath: arguments[0], isDirectory: true)
 
-func capture(_ name: String, command: String, keyword: String? = nil, markers: [String]) throws {
+func capture(_ name: String, command: String, keyword: String? = nil, lastTitles: [String] = [],
+             markers: [String], listMarkers: [String] = []) throws {
     if let keyword {
         guard try run("/usr/bin/osascript", ["-e", alfred + "search \"\(keyword)\""]) == 0 else {
             fail("Alfred did not open the \(name) search field.")
@@ -80,14 +81,17 @@ func capture(_ name: String, command: String, keyword: String? = nil, markers: [
             }
             let text = lines.joined(separator: " ").lowercased()
             guard markers.allSatisfy({ text.contains($0) }) else { continue }
+            let listText = (request.results ?? []).filter { $0.boundingBox.maxX < 0.47 }
+                .compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
+            guard listMarkers.allSatisfy({ listText.contains($0) }) else { continue }
             // Alfred appends default results after script results if there is room.
-            if let keyword {
-                let lastTitle = keyword == "pr" ? "simplify saved search settings" : "show useful empty states"
+            if !lastTitles.isEmpty {
                 guard let height = bounds["Height"] as? Double,
-                      let lastRow = (request.results ?? []).first(where: {
-                          $0.topCandidates(1).first?.string.lowercased().contains(lastTitle) == true
-                      }),
-                      lastRow.boundingBox.midY * height < 65
+                      (request.results ?? []).contains(where: { observation in
+                          let title = observation.topCandidates(1).first?.string.lowercased() ?? ""
+                          return observation.boundingBox.midY * height < 65 &&
+                              lastTitles.contains { title.contains($0) }
+                      })
                 else { continue }
             }
             if keyword == "pr" {
@@ -121,11 +125,17 @@ func capture(_ name: String, command: String, keyword: String? = nil, markers: [
 guard CGPreflightScreenCaptureAccess() else {
     fail("Allow Screen Recording for the terminal in System Settings and retry.")
 }
-try capture("picker", command: "search \"pr \"", keyword: "pr",
+try capture("picker", command: "search \"pr \"", keyword: "pr", lastTitles: ["simplify saved search settings"],
             markers: ["add keyboard navigation", "improve search relevance", "draft"])
-try capture("issue-picker", command: "search \"is demo-hub\"", keyword: "is",
+try capture("issue-picker", command: "search \"is demo-hub\"", keyword: "is", lastTitles: ["show useful empty states"],
             markers: ["improve keyboard navigation", "restore archived projects", "assigned"])
 try capture("pr-dashboard", command: "run trigger \"pr-dashboard\" in workflow \"org.hubfred.screenshots\"",
             markers: ["command palette shortcuts", "keyboard behavior", "return to the search field"])
 try capture("dashboard", command: "run trigger \"issue-dashboard\" in workflow \"org.hubfred.screenshots\"",
             markers: ["saved views", "acceptance criteria", "preserve selection on refresh"])
+try capture("github-picker", command: "search \"gh \"", keyword: "gh",
+            lastTitles: ["add an outage banner", "preserve search focus"],
+            markers: ["improve keyboard navigation", "add keyboard navigation", "draft"])
+try capture("github-dashboard", command: "run trigger \"github-dashboard\" in workflow \"org.hubfred.screenshots\"",
+            markers: ["saved views", "acceptance criteria", "preserve selection on refresh"],
+            listMarkers: ["improve keyboard navigation", "add keyboard navigation"])
