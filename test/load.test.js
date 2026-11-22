@@ -266,15 +266,18 @@ test('picker does not show stale rows after expiration or a credential change', 
 test('picker narrows the dashboard list before taking the latest ten', t => {
     const row = (index, repository) => {
         const url = `https://github.com/example-org/${repository}/pull/${index}`;
-        return {...oldItem, uid: url, arg: url, match: `Fix controls example-org/${repository} #${index}`};
+        return {...oldItem, uid: url, arg: url, match: `Fix résumé controls example-org/${repository} #${index}`};
     };
     const matches = Array.from({length: 12}, (_, index) => row(30 - index, 'widget-builder'));
     const unrelated = Array.from({length: 12}, (_, index) => row(50 - index, 'another-repo'));
     const testCase = scenario(t, {age: 0, cachedRows: [...unrelated, ...matches]});
     const output = testCase.runPicker('WARN'); // No match must not trigger a refresh of a fresh list.
     assert.equal(output.items[0].valid, false);
-    assert.deepEqual(testCase.runPicker('Widget controls').items.map(item => item.uid),
+    assert.deepEqual(testCase.runPicker('Widget resume').items.map(item => item.uid),
         matches.slice(0, 10).map(item => item.uid));
+    assert.deepEqual(testCase.runPicker('re\u0301sume\u0301').items.map(item => item.uid),
+        [...unrelated, ...matches].slice(0, 10).map(item => item.uid));
+    assert.equal(testCase.runPicker('rêsumé').items[0].valid, false);
     assert.equal(testCase.runPicker('widget.*').items[0].valid, false);
     assert.equal(testCase.searchCount(), 0);
 });

@@ -14,26 +14,39 @@ message() {
 }
 
 emit_picker() {
-    /usr/bin/jq --arg query "$query" --argjson rerun "$rerun" --arg key "$identity" --arg mode "$cache_mode" '
-        def literal_regex:
-            split("") | map(. as $c | if "\\.^$|?*+()[]{}" | contains($c) then "\\" + $c else $c end) | join("");
-        if $query == "" then .
-        else
-            [$query | scan("\\S+") | "(?:^|\\s)" + literal_regex] as $terms
-            | {items: [limit(10; .items[] | select(.arg)
-                | (.match + " " + (.uid | split("/")[4])) as $text
-                | select(all($terms[]; . as $term | $text | test($term; "i")))
-                | {title, subtitle, uid, arg, icon})]}
-            | if .items == [] then {items: [{
-                title: (if $rerun then "Searching GitHub…" else "No matching open items" end),
-                valid: false
-            }]} else . end
-        end
-        | . + {skipknowledge: true}
-        | if $rerun then . + {rerun: (if $query == "" then 0.1 else 0.3 end), variables: {
-            hubfred_refresh_identity: $key, hubfred_refresh_mode: $mode
-        }} else . end
-    ' <<< "$results"
+    /usr/bin/perl -MJSON::PP -MUnicode::Normalize=NFD -MEncode=decode -e '
+        my ($query, $rerun, $identity, $mode) = @ARGV;
+        $query = NFD(decode("UTF-8", $query));
+        local $/;
+        my $json = JSON::PP->new->utf8;
+        my $output = $json->decode(<STDIN>);
+        if (length $query) {
+            my $fold = $query !~ /\pM/;
+            my @terms = map { qr/(?:^|\s)\Q$_\E/i } split " ", $query;
+            my @matches;
+            for my $item (@{$output->{items}}) {
+                next unless $item->{arg};
+                my $repo = (split m{/}, $item->{uid})[4];
+                my $text = "$item->{match} $repo";
+                $text = NFD($text);
+                $text =~ s/\pM//g if $fold;
+                next if grep { $text !~ $_ } @terms;
+                push @matches, {map { $_ => $item->{$_} } qw(title subtitle uid arg icon)};
+                last if @matches == 10;
+            }
+            push @matches, {
+                title => $rerun eq "true" ? "Searching GitHub\x{2026}" : "No matching open items",
+                valid => JSON::PP::false
+            } unless @matches;
+            $output = {items => \@matches};
+        }
+        $output->{skipknowledge} = JSON::PP::true;
+        if ($rerun eq "true") {
+            $output->{rerun} = length($query) ? 0.3 : 0.1;
+            $output->{variables} = {hubfred_refresh_identity => $identity, hubfred_refresh_mode => $mode};
+        }
+        print $json->encode($output), "\n";
+    ' "$query" "$rerun" "$identity" "$cache_mode" <<< "$results"
 }
 
 if [[ "$mode" == cached-picker ]]; then
