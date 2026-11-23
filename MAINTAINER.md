@@ -33,7 +33,7 @@ Run `--prepare` and import the workflow only once. `--prepare` only builds the a
 
 For editor-only changes to `uidata` in `workflow/info.plist`, verify the node layout in Alfred Preferences. The README screenshots show the pickers and dashboards, not the workflow editor.
 
-Captures use synthetic data from `scripts/screenshots/fixtures.json` and a fixed UTC timestamp. The screenshot workflow uses a Bundle ID and cache separate from production and does not connect to GitHub CLI. Verify that the target window shows synthetic data, then save PNGs without shadows and with transparent corners outside the rounded window. Use Alfred Classic to match the existing images; pixel-level results can still vary by OS. The screenshot workflow and data are excluded from release packages.
+Captures use synthetic GitHub REST search results from `scripts/screenshots/fixtures.json` and a fixed UTC timestamp. The screenshot workflow has its own Bundle ID and cache. It runs the offline `scripts/screenshots/gh` fixture adapter instead of the installed GitHub CLI. Verify that the target window shows synthetic data, then save PNGs without shadows and with transparent corners outside the rounded window. Use Alfred Classic to match the existing images; pixel-level results can still vary by OS. The screenshot workflow and data are excluded from release packages.
 
 Only one capture can run against the same Alfred workflows directory at a time, even when it is reached through different paths. A competing capture fails immediately without touching settings. The lock is held from before keyword backup until restoration and window dismissal are complete.
 
