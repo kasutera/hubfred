@@ -29,9 +29,10 @@ def render_item($receipt; $raw; $kind; $icon_dir):
       | if test("^https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(pull|issues)/[0-9]+$") then .
         else error("invalid GitHub search item URL")
         end) as $url
+  | ($url | split("/")[-2]) as $route
   | ($raw.user.login // "") as $author
   | ($raw.number | tostring) as $number
-  | (if ($url | contains("/pull/")) then
+  | (if $route == "pull" then
        if ($raw.draft // false) then "draft" else "ready" end
      else "issue" end) as $state
   | category_reason($receipt.category) as $reason
@@ -61,7 +62,13 @@ def render_item($receipt; $raw; $kind; $icon_dir):
     {items: [], seen: {}};
     if .seen[$row.uid] != null then
       (.seen[$row.uid]) as $index
-      | .items[$index].reasons |= ((. + $row.reasons) | unique)
+      | (.items[$index].reasons + $row.reasons | unique) as $reasons
+      | if ($row.updatedAt | fromdateiso8601) >
+           (.items[$index].updatedAt | fromdateiso8601) then
+          .items[$index] = ($row | .reasons = $reasons)
+        else
+          .items[$index].reasons = $reasons
+        end
     else
       .seen[$row.uid] = (.items | length)
       | .items += [$row]
