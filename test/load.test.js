@@ -13,6 +13,7 @@ const packageScratch = mkdtempSync(path.join(os.tmpdir(), 'hubfred-load-package-
 execFileSync('/usr/bin/unzip', ['-q', path.join(root, 'dist', 'hubfred.alfredworkflow'), '-d', packageScratch]);
 after(() => rmSync(packageScratch, {recursive: true, force: true}));
 const loader = path.join(packageScratch, 'prs.alfredui', 'load.sh');
+const picker = path.join(packageScratch, 'search.sh');
 const freshLimit = 60;
 const staleLimit = 60 * 60;
 const oldURL = 'https://github.com/owner/repo/pull/1';
@@ -73,7 +74,7 @@ if [[ "\${1:-}" == api ]]; then
     [[ "\${HUBFRED_TEST_SEARCH_FAIL:-false}" != true ]] || exit 1
     if [[ "$page" == 2 && "$query" == *" author:reader"* && "\${HUBFRED_TEST_RATE_LIMIT:-false}" == true && ! -e "$HUBFRED_TEST_SEARCH_LOG.throttle" ]]; then
         : > "$HUBFRED_TEST_SEARCH_LOG.throttle"
-        printf 'HTTP/2.0 429 Too Many Requests\\r\\nRetry-After: 0\\r\\n\\r\\n{}'
+        printf 'HTTP/2.0 429 Too Many Requests\\r\\nX-RateLimit-Remaining: 0\\r\\nX-RateLimit-Reset: %s\\r\\n\\r\\n{}' "$(/bin/date +%s)"
         exit 1
     fi
     printf 'HTTP/2.0 200 OK\\r\\n\\r\\n'
@@ -132,7 +133,7 @@ function scenario(t, {
     writeFileSync(fakeGh, mockGh);
     chmodSync(fakeGh, 0o755);
     mkdirSync(iconDir, {recursive: true});
-    for (const color of ['AC6B49', '4269A5', 'A48332', 'B15F91', '4E94B8', '62636D']) {
+    for (let color = 0; color < 6; color++) {
         for (const state of ['ready', 'draft']) {
             writeFileSync(path.join(iconDir, `${color}-${state}.png`), 'fixture');
         }
@@ -146,7 +147,7 @@ function scenario(t, {
         CREATE TABLE ${mode} (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL);
         CREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;
         INSERT INTO ${mode} VALUES (${literal(cacheKey(cacheToken))}, unixepoch() - ${age}, 'old-result-digest',
-            ${literal(JSON.stringify({items: cachedRows ?? [oldRow]}))});
+            ${literal(JSON.stringify({items: cachedRows === undefined ? [oldRow] : cachedRows}))});
         INSERT INTO bodies VALUES (${literal(oldURL)}, ${literal(JSON.stringify(body))});
     `);
     const originalCache = readFileSync(cacheFile);
@@ -193,13 +194,13 @@ function scenario(t, {
     }
 
     function runPicker(query = '', variables) {
-        return runJSON(loader, ['picker', 'prs', query], variables);
+        return runJSON(picker, ['cached-picker', 'prs', query], variables);
     }
 
     let session;
-    function runDashboard(phase = 'first') {
+    function runDashboard(phase = 'first', extraEnv) {
         if (phase === 'first' && session === undefined) runDashboard('cached');
-        const output = runJSON(loader, [phase], {dashboard_session: session ?? ''});
+        const output = runJSON(loader, [phase], {dashboard_session: session ?? '', ...extraEnv});
         if (phase === 'cached') session = output.variables?.dashboard_session ?? '';
         return output;
     }
@@ -212,6 +213,9 @@ function scenario(t, {
         run: mode === 'picker' ? variables => runPicker('', variables) : runDashboard,
         runPicker,
         runDashboard,
+        preview(url, extraEnv) {
+            return runJSON(loader, ['preview', url, 'ready'], extraEnv).update.ids.preview.text;
+        },
         searchLog,
         currentToken() {
             return readFileSync(tokenFile, 'utf8');
@@ -244,9 +248,20 @@ function assertRefreshFailure(output) {
 test('same-auth failed refresh preserves the cached display', t => {
     const testCase = scenario(t);
     assert.deepEqual(testCase.run(), {});
-    // The first failure can cancel the sibling request before it reaches the fixture.
     assert.ok(testCase.searchCount() > 0);
     testCase.assertNoCacheWrites();
+});
+
+test('a fresh empty snapshot from the Go release does not trigger a search', t => {
+    const dashboard = scenario(t, {age: 0, cachedRows: null});
+    assert.equal(dashboard.run('cached').variables.dashboard_session, '');
+    assert.deepEqual(dashboard.run('first'), {});
+    assert.equal(dashboard.searchCount(), 0);
+    const picker = scenario(t, {mode: 'picker', age: 0, cachedRows: null});
+    const output = picker.run();
+    assert.equal(output.items[0].valid, false);
+    assert.equal(output.rerun, undefined);
+    assert.equal(picker.searchCount(), 0);
 });
 
 test('does not show older cached data after switching to another auth identity', t => {
@@ -288,6 +303,16 @@ test('a successful one-page refresh displays before saving the body-free list an
     assert.equal(persistedList.items[0].body, undefined);
     const persistedBody = JSON.parse(sqlite(testCase.cacheFile, 'SELECT body FROM bodies;'));
     assert.equal(persistedBody, fetchedItem.body);
+    assert.match(testCase.preview(fetchedItem.url), /New fetched preview: 日本語/);
+    assert.doesNotMatch(testCase.preview(fetchedItem.url, {GH_TOKEN: 'token-b'}), /New fetched preview/);
+    assert.equal(testCase.searchCount(), 2);
+});
+
+test('changing the account after first paint discards the pending save', t => {
+    const testCase = scenario(t, {searchFails: false});
+    assert.equal(testCase.run('first').pulse.args[0], 'save');
+    assertRefreshFailure(testCase.run('save', {GH_TOKEN: 'token-b'}));
+    testCase.assertNoCacheWrites();
 });
 
 test('a cold dashboard displays page one without waiting for or saving page two', t => {
@@ -315,6 +340,8 @@ test('a cold dashboard displays page one without waiting for or saving page two'
     const saved = testCase.run('save');
     assert.equal(saved.update.ids.prs.data.src.length, 101);
     assert.equal(testCase.run('cached').update.ids.prs.data.src.length, 101);
+    assert.equal(testCase.run('cached', {hubfred_dashboard_limit: '102'}).update.ids.prs, undefined);
+    assert.equal(testCase.searchCount(), 5);
     const scopedFile = path.join(testCase.cacheDir, 'dashboard-scope-v1.sqlite3');
     assert.equal(sqlite(scopedFile, 'SELECT scope FROM dashboard;').trim(), '101:0');
     assert.notDeepEqual(readFileSync(scopedFile), testCase.originalCache);
@@ -453,6 +480,9 @@ test('filtered picker finds a match on page two without repeating any search pag
     const waiting = testCase.runPicker('new fetched');
     const found = testCase.runPicker('new fetched', waiting.variables);
     assert.deepEqual(found.items.map(row => row.uid), [fetchedItem.url]);
+    assert.deepEqual(testCase.runPicker('new fetched').items.map(item => item.uid), [fetchedItem.url]);
+    assert.equal(testCase.run('cached', {hubfred_dashboard_limit: '1000', hubfred_dashboard_days: '0'})
+        .update.ids.prs.data.src.length, 101);
     const calls = readFileSync(testCase.searchLog, 'utf8').trim().split('\n');
     assert.equal(calls.length, 4);
     assert.equal(calls.filter(line => /\bpage=1\b/.test(line)).length, 2);
