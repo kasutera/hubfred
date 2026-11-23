@@ -3,18 +3,18 @@
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const { execFileSync, spawnSync } = require('node:child_process');
-const { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } = require('node:fs');
+const { after, test } = require('node:test');
+const { chmodSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
-const loader = path.join(root, 'workflow', 'prs.alfredui', 'load.sh');
-const picker = path.join(root, 'workflow', 'search.sh');
-const [freshLimit, staleLimit] = execFileSync('/bin/bash', [
-    '-ec', 'source "$1"; printf "%s %s" "$CACHE_FRESH_SECONDS" "$CACHE_STALE_SECONDS"',
-    'cache-limits', path.join(path.dirname(loader), 'cache-decisions.sh')
-], {encoding: 'utf8'}).split(' ').map(Number);
+const packageScratch = mkdtempSync(path.join(os.tmpdir(), 'hubfred-load-package-'));
+execFileSync('/usr/bin/unzip', ['-q', path.join(root, 'dist', 'hubfred.alfredworkflow'), '-d', packageScratch]);
+after(() => rmSync(packageScratch, {recursive: true, force: true}));
+const loader = path.join(packageScratch, 'prs.alfredui', 'load.sh');
+const freshLimit = 60;
+const staleLimit = 60 * 60;
 const oldURL = 'https://github.com/owner/repo/pull/1';
 const oldItem = {
     uid: oldURL,
@@ -37,25 +37,71 @@ const fetchedItem = {
     isDraft: false,
     body: "New fetched preview: 日本語, 'quotes' and semi;colons.\n\nSecond paragraph."
 };
-const mockGh = `
-gh() {
-    if [[ "$1" == auth && "$2" == token ]]; then
-        /bin/cat "$HUBFRED_TEST_CURRENT_TOKEN_FILE"
-        return 0
-    fi
-    if [[ "$1" == search ]]; then
-        echo "$*" >> "$HUBFRED_TEST_SEARCH_LOG"
-        [[ "\${HUBFRED_TEST_SEARCH_FAIL:-false}" != true ]] || return 1
-        next_token=$(/usr/bin/jq -r '.afterSearchAuth // empty' "$HUBFRED_TEST_SEARCH_RESULTS")
-        /usr/bin/jq -c '.results' "$HUBFRED_TEST_SEARCH_RESULTS"
-        if [[ -n "$next_token" ]]; then
-            printf '%s' "$next_token" > "$HUBFRED_TEST_CURRENT_TOKEN_FILE"
+const mockGh = `#!/bin/bash
+set -euo pipefail
+
+if [[ "\${1:-}" == auth && "\${2:-}" == token ]]; then
+    /bin/cat "$HUBFRED_TEST_CURRENT_TOKEN_FILE"
+    exit
+fi
+
+if [[ "\${1:-}" == api ]]; then
+    shift
+    if [[ "\${1:-}" == user ]]; then
+        if [[ " $* " == *" --jq .login "* ]]; then
+            printf '%s\\n' reader
+        else
+            printf '%s\\n' '{"login":"reader"}'
         fi
-        return 0
+        exit
     fi
-    return 1
-}
-export -f gh
+
+    local_arg=
+    page=1
+    per_page=100
+    query=
+    for local_arg in "$@"; do
+        case "$local_arg" in
+            search/issues) ;;
+            q=*) query=\${local_arg#q=} ;;
+            page=*) page=\${local_arg#page=} ;;
+            per_page=*) per_page=\${local_arg#per_page=} ;;
+        esac
+    done
+    [[ -n "$query" ]] || exit 2
+    printf '%s\\n' "$*" >> "$HUBFRED_TEST_SEARCH_LOG"
+    [[ "\${HUBFRED_TEST_SEARCH_FAIL:-false}" != true ]] || exit 1
+    if [[ "$page" == 2 && "$query" == *" author:reader"* && "\${HUBFRED_TEST_RATE_LIMIT:-false}" == true && ! -e "$HUBFRED_TEST_SEARCH_LOG.throttle" ]]; then
+        : > "$HUBFRED_TEST_SEARCH_LOG.throttle"
+        printf 'HTTP/2.0 429 Too Many Requests\\r\\nRetry-After: 0\\r\\n\\r\\n{}'
+        exit 1
+    fi
+    printf 'HTTP/2.0 200 OK\\r\\n\\r\\n'
+    /usr/bin/jq -ce --argjson page "$page" --argjson perPage "$per_page" '
+        . as $response | (.pages[$page - 1] // .results[($page - 1) * $perPage:$page * $perPage]) as $rows
+        | {total_count: (if $response.pages then $response.pages | map(length) | add else $response.results | length end),
+            incomplete_results: ($response.incompletePage == $page), items: ($rows | map(
+                . as $item
+                | {url: ("https://api.github.com/repos/" + $item.repository.nameWithOwner + "/issues/" + ($item.number | tostring)),
+                    html_url: $item.url,
+                    repository_url: ("https://api.github.com/repos/" + $item.repository.nameWithOwner),
+                    number: $item.number, title: $item.title, user: $item.author,
+                    state: "open", updated_at: $item.updatedAt,
+                    labels: ($item.labels // []), body: ($item.body // "")}
+                + (if ($item | has("isDraft")) then
+                    {draft: $item.isDraft, pull_request: {
+                        url: ("https://api.github.com/repos/" + $item.repository.nameWithOwner + "/pulls/" + ($item.number | tostring)),
+                        html_url: $item.url
+                    }}
+                   else {} end)
+            ))}
+    ' "$HUBFRED_TEST_SEARCH_RESULTS"
+    next_token=$(/usr/bin/jq -r '.afterSearchAuth // empty' "$HUBFRED_TEST_SEARCH_RESULTS")
+    if [[ -n "$next_token" ]]; then printf '%s' "$next_token" > "$HUBFRED_TEST_CURRENT_TOKEN_FILE"; fi
+    exit
+fi
+
+exit 2
 `;
 
 function cacheKey(token) {
@@ -73,12 +119,18 @@ function sqlite(file, sql) {
 function scenario(t, {
     activeToken = 'token-a', cacheToken = 'token-a',
     searchFails = true, authAfterSearch = null, mode = 'dashboard',
-    age = Math.floor((freshLimit + staleLimit) / 2), cachedRows
+    age = Math.floor((freshLimit + staleLimit) / 2), cachedRows, limit = '1000', days = '0', pages,
+    rateLimited = false, incompletePage = null, results = [fetchedItem]
 } = {}) {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'hubfred-load-'));
     t.after(() => rmSync(directory, {recursive: true, force: true}));
     const cacheDir = path.join(directory, 'cache');
     const iconDir = path.join(cacheDir, 'octicons-v5');
+    const fakeBin = path.join(directory, 'bin');
+    mkdirSync(fakeBin);
+    const fakeGh = path.join(fakeBin, 'gh');
+    writeFileSync(fakeGh, mockGh);
+    chmodSync(fakeGh, 0o755);
     mkdirSync(iconDir, {recursive: true});
     for (const color of ['AC6B49', '4269A5', 'A48332', 'B15F91', '4E94B8', '62636D']) {
         for (const state of ['ready', 'draft']) {
@@ -101,22 +153,26 @@ function scenario(t, {
     const originalCacheStats = statSync(cacheFile);
     const searchResults = path.join(directory, 'search-results.json');
     writeFileSync(searchResults, JSON.stringify({
-        results: [fetchedItem],
+        results,
+        incompletePage,
+        ...(pages ? {pages} : {}),
         ...(authAfterSearch === null ? {} : {afterSearchAuth: authAfterSearch})
     }));
     const tokenFile = path.join(directory, 'current-token');
     writeFileSync(tokenFile, activeToken);
-    const envFile = path.join(directory, 'bash-env');
-    writeFileSync(envFile, mockGh);
     const searchLog = path.join(directory, 'search.log');
     const env = {
         ...process.env,
-        BASH_ENV: envFile,
+        PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
         HOME: directory,
+        TMPDIR: directory,
         alfred_workflow_cache: cacheDir,
         dashboard_kind: 'prs',
+        hubfred_dashboard_limit: limit,
+        hubfred_dashboard_days: days,
         HUBFRED_TEST_CURRENT_TOKEN_FILE: tokenFile,
         HUBFRED_TEST_SEARCH_FAIL: String(searchFails),
+        HUBFRED_TEST_RATE_LIMIT: String(rateLimited),
         HUBFRED_TEST_SEARCH_LOG: searchLog,
         HUBFRED_TEST_SEARCH_RESULTS: searchResults
     };
@@ -137,7 +193,15 @@ function scenario(t, {
     }
 
     function runPicker(query = '', variables) {
-        return runJSON(picker, ['cached-picker', 'prs', query], variables);
+        return runJSON(loader, ['picker', 'prs', query], variables);
+    }
+
+    let session;
+    function runDashboard(phase = 'first') {
+        if (phase === 'first' && session === undefined) runDashboard('cached');
+        const output = runJSON(loader, [phase], {dashboard_session: session ?? ''});
+        if (phase === 'cached') session = output.variables?.dashboard_session ?? '';
+        return output;
     }
 
     return {
@@ -145,8 +209,10 @@ function scenario(t, {
         cacheFile,
         originalCache,
         originalCacheStats,
-        run: mode === 'picker' ? variables => runPicker('', variables) : (...args) => runJSON(loader, args),
+        run: mode === 'picker' ? variables => runPicker('', variables) : runDashboard,
         runPicker,
+        runDashboard,
+        searchLog,
         currentToken() {
             return readFileSync(tokenFile, 'utf8');
         },
@@ -198,23 +264,81 @@ test('search fixture auth change suppresses fetched results and cache writes and
     testCase.assertNoCacheWrites();
 });
 
-test('a successful refresh serves the same rows from the body-free cache', t => {
+test('a successful one-page refresh displays before saving the body-free list and preview', t => {
     const testCase = scenario(t, {searchFails: false});
     const output = testCase.run();
     const rows = output.update.ids.prs.data.src;
     assert.equal(rows.length, 1);
     assert.equal(rows[0]['title.text'], fetchedItem.title);
     assert.equal(rows[0].uid, fetchedItem.url);
+    assert.equal(rows[0].previewState, 'pending');
+    assert.equal(output.pulse.args[0], 'save');
     assert.equal(testCase.currentToken(), 'token-a');
     assert.equal(testCase.searchCount(), 2);
+    testCase.assertNoCacheWrites();
 
-    assert.deepEqual(testCase.run('cached').update.ids.prs.data.src, rows);
-    assert.deepEqual(testCase.run('refresh'), {});
+    const saved = testCase.run('save').update.ids.prs.data.src;
+    assert.equal(saved[0].previewState, 'ready');
+    assert.equal(saved[0].uid, fetchedItem.url);
+    assert.deepEqual(testCase.run('cached').update.ids.prs.data.src, saved);
+    assert.deepEqual(testCase.run('first'), {});
     assert.equal(testCase.searchCount(), 2);
     const persistedList = JSON.parse(sqlite(testCase.cacheFile, 'SELECT list FROM dashboard;'));
     assert.equal(persistedList.items[0].body, undefined);
     const persistedBody = JSON.parse(sqlite(testCase.cacheFile, 'SELECT body FROM bodies;'));
     assert.equal(persistedBody, fetchedItem.body);
+});
+
+test('a cold dashboard displays page one without waiting for or saving page two', t => {
+    const row = index => ({...fetchedItem, number: 200 + index,
+        url: `https://github.com/owner/repo/pull/${200 + index}`});
+    const first = Array.from({length: 100}, (_, index) => row(index));
+    const testCase = scenario(t, {searchFails: false, limit: '101', pages: [first, [row(100), row(101)]], rateLimited: true});
+    const initial = testCase.run('cached');
+    assert.equal(initial.update.ids.prs, undefined);
+    const page = testCase.run();
+    assert.equal(page.pulse.args[0], 'more');
+    assert.equal(page.update.ids.prs.data.src.length, 100);
+    assert.equal(testCase.searchCount(), 2);
+    testCase.assertNoCacheWrites();
+    const final = testCase.run('more');
+    assert.equal(final.pulse.args[0], 'save');
+    assert.equal(final.update.ids.prs.data.src.length, 101);
+    assert.ok(final.update.ids.prs.data.src.some(item => item.uid === row(100).url));
+    assert.ok(!final.update.ids.prs.data.src.some(item => item.uid === row(101).url));
+    assert.equal(testCase.searchCount(), 5);
+    const log = readFileSync(testCase.searchLog, 'utf8').trim().split('\n');
+    assert.equal(log.filter(line => /\bpage=1\b/.test(line)).length, 2);
+    assert.equal(log.filter(line => /\bpage=2\b/.test(line)).length, 3);
+    testCase.assertNoCacheWrites();
+    const saved = testCase.run('save');
+    assert.equal(saved.update.ids.prs.data.src.length, 101);
+    assert.equal(testCase.run('cached').update.ids.prs.data.src.length, 101);
+    const scopedFile = path.join(testCase.cacheDir, 'dashboard-scope-v1.sqlite3');
+    assert.equal(sqlite(scopedFile, 'SELECT scope FROM dashboard;').trim(), '101:0');
+    assert.notDeepEqual(readFileSync(scopedFile), testCase.originalCache);
+});
+
+test('an incomplete search response cannot replace a same-account cached dashboard', t => {
+    const testCase = scenario(t, {searchFails: false, incompletePage: 1});
+    assert.deepEqual(testCase.run('cached').update.ids.prs.data.src.map(row => row.uid), [oldURL]);
+    assert.deepEqual(testCase.run('first'), {});
+    testCase.assertNoCacheWrites();
+});
+
+test('a cold dashboard offers only matching recent picker rows before searching', t => {
+    const recent = {...oldItem, updatedAt: new Date().toISOString()};
+    const older = {...oldItem, uid: fetchedItem.url, arg: fetchedItem.url, updatedAt: '2000-01-01T00:00:00Z'};
+    const testCase = scenario(t, {mode: 'picker', days: '7', cachedRows: [recent, older]});
+    const staleAuth = scenario(t, {mode: 'picker', days: '7', cachedRows: [recent], cacheToken: 'token-b'});
+    assert.deepEqual(testCase.runDashboard('cached').update.ids.prs.data.src.map(row => row.uid), [oldURL]);
+    assert.equal(staleAuth.runDashboard('cached').update.ids.prs, undefined);
+    assert.equal(testCase.searchCount(), 0);
+    const failed = testCase.runDashboard('first').update.ids;
+    assert.deepEqual(failed.prs.data.src.map(row => row.uid), [oldURL]);
+    assert.equal(failed.prs.data.src[0].previewState, 'unavailable');
+    assert.match(failed.loadstatus.text, /^Could not load GitHub /);
+    testCase.assertNoCacheWrites();
 });
 
 test('picker displays matching stale rows before searching and replaces them on its one rerun', t => {
@@ -231,6 +355,28 @@ test('picker displays matching stale rows before searching and replaces them on 
     assert.equal(testCase.searchCount(), 2);
     assert.deepEqual(testCase.run(), refreshed);
     assert.equal(testCase.searchCount(), 2);
+});
+
+test('picker returns the latest ten unique rows and preserves all participation reasons', t => {
+    const results = Array.from({length: 12}, (_, i) => {
+        const number = 400 + i;
+        return {...fetchedItem, number, url: `https://github.com/owner/repo/pull/${number}`,
+            updatedAt: `2026-01-${String(20 - i).padStart(2, '0')}T12:00:00Z`};
+    });
+    const testCase = scenario(t, {mode: 'picker', age: staleLimit, searchFails: false, results});
+    const output = testCase.run();
+    assert.deepEqual(output.items.map(row => row.uid), results.slice(0, 10).map(row => row.url));
+    assert.ok(output.items.every(row => row.subtitle.endsWith('Authored · Review requested')));
+    assert.equal(testCase.searchCount(), 2);
+    assert.equal(sqlite(testCase.cacheFile, 'SELECT count(*) FROM bodies;').trim(), '0');
+});
+
+test('picker refreshes a same-account snapshot at the freshness threshold', t => {
+    const testCase = scenario(t, {mode: 'picker', age: freshLimit});
+    const cached = testCase.run();
+    assert.deepEqual(cached.items.map(item => item.uid), [oldURL]);
+    assert.equal(cached.rerun, 0.1);
+    assert.equal(testCase.searchCount(), 0);
 });
 
 test('picker retains a matching stale list on fetch failure without scheduling another rerun', t => {
@@ -293,4 +439,22 @@ test('filtered picker refreshes the broad snapshot without using another credent
     const loaded = testCase.run('cached').update.ids.prs.data.src;
     assert.deepEqual(loaded.map(row => row.uid), [fetchedItem.url]);
     assert.equal(testCase.searchCount(), 2);
+});
+
+test('filtered picker finds a match on page two without repeating any search page', t => {
+    const pageOne = Array.from({length: 100}, (_, i) => ({
+        ...fetchedItem, title: 'Unrelated queue entry', number: 200 + i,
+        url: `https://github.com/owner/repo/pull/${200 + i}`
+    }));
+    const testCase = scenario(t, {
+        activeToken: 'token-b', searchFails: false, limit: '1', days: '1', pages: [pageOne, [fetchedItem]]
+    });
+    const waiting = testCase.runPicker('new fetched');
+    const found = testCase.runPicker('new fetched', waiting.variables);
+    assert.deepEqual(found.items.map(row => row.uid), [fetchedItem.url]);
+    const calls = readFileSync(testCase.searchLog, 'utf8').trim().split('\n');
+    assert.equal(calls.length, 4);
+    assert.equal(calls.filter(line => /\bpage=1\b/.test(line)).length, 2);
+    assert.equal(calls.filter(line => /\bpage=2\b/.test(line)).length, 2);
+    assert.ok(calls.every(line => !line.includes('updated:>=') && line.includes('per_page=100')));
 });

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -20,16 +19,21 @@ import (
 
 const defaultCacheSubdir = "Library/Caches/jp.kasutera.hubfred"
 
-// dashboardStore owns the dashboard and picker SQLite snapshots. Its schema is
-// shared with the legacy Alfred picker, so keep table and column names stable.
+const (
+	cacheFresh = 60 * time.Second
+	cacheStale = time.Hour
+)
+
+// dashboardStore owns the picker and dashboard snapshots. Keep their on-disk
+// schemas compatible with snapshots from earlier releases.
 type dashboardStore struct {
-	Dir, Path, PickerPath, Scope, GH string
-	Limit, Days                     int
-	Cutoff                          time.Time
-	Fresh, Stale                    time.Duration
+	Dir, Path, BroadPath, PickerPath, Scope, GH string
+	Limit, Days                                int
+	Cutoff                                     time.Time
+	Fresh, Stale                               time.Duration
 }
 
-func newDashboardStore(uiDir, kind string) (dashboardStore, error) {
+func newDashboardStore(kind string) (dashboardStore, error) {
 	var dashboardName, scopedName, pickerName string
 	switch kind {
 	case "prs":
@@ -42,10 +46,6 @@ func newDashboardStore(uiDir, kind string) (dashboardStore, error) {
 		return dashboardStore{}, fmt.Errorf("unknown dashboard kind %q", kind)
 	}
 
-	fresh, stale, err := cacheThresholds(uiDir)
-	if err != nil {
-		return dashboardStore{}, err
-	}
 	limit := normalizeDashboardSetting(os.Getenv("hubfred_dashboard_limit"), 100, 1, 1000)
 	days := normalizeDashboardSetting(os.Getenv("hubfred_dashboard_days"), 0, 0, 36500)
 
@@ -72,11 +72,12 @@ func newDashboardStore(uiDir, kind string) (dashboardStore, error) {
 
 	store := dashboardStore{
 		Dir:        dir,
+		BroadPath:  filepath.Join(dir, dashboardName),
 		PickerPath: filepath.Join(dir, pickerName),
 		Limit:      limit,
 		Days:       days,
-		Fresh:      fresh,
-		Stale:      stale,
+		Fresh:      cacheFresh,
+		Stale:      cacheStale,
 		GH:         resolveGH(),
 	}
 	if days > 0 {
@@ -89,52 +90,6 @@ func newDashboardStore(uiDir, kind string) (dashboardStore, error) {
 		store.Scope = fmt.Sprintf("%d:%d", limit, days)
 	}
 	return store, nil
-}
-
-func cacheThresholds(uiDir string) (time.Duration, time.Duration, error) {
-	if uiDir == "" {
-		executable, err := os.Executable()
-		if err != nil {
-			return 0, 0, fmt.Errorf("locate dashboard UI directory: %w", err)
-		}
-		uiDir = filepath.Dir(executable)
-	}
-	file, err := os.Open(filepath.Join(uiDir, "cache-decisions.sh"))
-	if err != nil {
-		return 0, 0, fmt.Errorf("open cache decisions in %q: %w", uiDir, err)
-	}
-	defer file.Close()
-
-	values := make(map[string]time.Duration, 2)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(strings.SplitN(scanner.Text(), "#", 2)[0])
-		fields := strings.Fields(line)
-		if len(fields) != 2 || fields[0] != "readonly" {
-			continue
-		}
-		name, literal, ok := strings.Cut(fields[1], "=")
-		if !ok || (name != "CACHE_FRESH_SECONDS" && name != "CACHE_STALE_SECONDS") {
-			continue
-		}
-		seconds, parseErr := strconv.ParseUint(literal, 10, 63)
-		if parseErr != nil || seconds == 0 || seconds > uint64(math.MaxInt64/int64(time.Second)) {
-			return 0, 0, fmt.Errorf("invalid %s literal in cache-decisions.sh", name)
-		}
-		if _, duplicate := values[name]; duplicate {
-			return 0, 0, fmt.Errorf("duplicate %s definition in cache-decisions.sh", name)
-		}
-		values[name] = time.Duration(seconds) * time.Second
-	}
-	if err := scanner.Err(); err != nil {
-		return 0, 0, fmt.Errorf("read cache decisions: %w", err)
-	}
-	fresh, hasFresh := values["CACHE_FRESH_SECONDS"]
-	stale, hasStale := values["CACHE_STALE_SECONDS"]
-	if !hasFresh || !hasStale || stale < fresh {
-		return 0, 0, errors.New("cache-decisions.sh must define valid fresh and stale thresholds")
-	}
-	return fresh, stale, nil
 }
 
 func normalizeDashboardSetting(value string, fallback, minimum, maximum int) int {
@@ -277,7 +232,21 @@ func (s dashboardStore) read(ctx context.Context, identity string, picker bool) 
 }
 
 func (s dashboardStore) save(ctx context.Context, identity string, items []item) error {
+	return s.saveTo(ctx, identity, items, s.Path, "dashboard", s.Scope, true)
+}
+
+func (s dashboardStore) savePicker(ctx context.Context, identity string, rows []item, unfiltered bool) error {
+	if unfiltered {
+		return s.saveTo(ctx, identity, rows, s.PickerPath, "picker", "", false)
+	}
+	return s.saveTo(ctx, identity, rows, s.BroadPath, "dashboard", "", true)
+}
+
+func (s dashboardStore) saveTo(ctx context.Context, identity string, items []item, path, table, scope string, saveBodies bool) error {
 	if identity == "" {
+		if table == "picker" {
+			return errors.New("cannot save picker cache without an identity")
+		}
 		return errors.New("cannot save dashboard cache without an identity")
 	}
 	if err := os.MkdirAll(s.Dir, 0700); err != nil {
@@ -285,7 +254,7 @@ func (s dashboardStore) save(ctx context.Context, identity string, items []item)
 	}
 	file, err := os.CreateTemp(s.Dir, ".dashboard-*.sqlite3")
 	if err != nil {
-		return fmt.Errorf("create temporary dashboard cache: %w", err)
+		return fmt.Errorf("create temporary %s cache: %w", table, err)
 	}
 	temporary := file.Name()
 	cleanup := func() {
@@ -297,10 +266,10 @@ func (s dashboardStore) save(ctx context.Context, identity string, items []item)
 	defer cleanup()
 	if err := file.Chmod(0600); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("protect temporary dashboard cache: %w", err)
+		return fmt.Errorf("protect temporary %s cache: %w", table, err)
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("close temporary dashboard cache: %w", err)
+		return fmt.Errorf("close temporary %s cache: %w", table, err)
 	}
 
 	listItems := append([]item(nil), items...)
@@ -313,57 +282,55 @@ func (s dashboardStore) save(ctx context.Context, identity string, items []item)
 	if err != nil {
 		return fmt.Errorf("encode dashboard cache list: %w", err)
 	}
-	digestJSON, err := json.Marshal(struct {
-		Items []item `json:"items"`
-	}{Items: items})
-	if err != nil {
-		return fmt.Errorf("encode dashboard cache digest: %w", err)
-	}
-	digest := fmt.Sprintf("%x  -", sha256.Sum256(digestJSON))
 
 	scopeColumn, scopeValue := "", ""
-	if s.Scope != "" {
-		scopeColumn, scopeValue = ", scope TEXT NOT NULL", ", "+sqlLiteral(s.Scope)
+	if scope != "" {
+		scopeColumn, scopeValue = ", scope TEXT NOT NULL", ", "+sqlLiteral(scope)
 	}
 	var statement strings.Builder
-	statement.Grow(len(listJSON) + len(identity) + len(digest) + len(items)*64)
+	statement.Grow(len(listJSON) + len(identity) + len(items)*64)
 	statement.WriteString("BEGIN IMMEDIATE;\n")
-	statement.WriteString("CREATE TABLE dashboard (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL")
+	statement.WriteString("CREATE TABLE ")
+	statement.WriteString(table)
+	statement.WriteString(" (identity TEXT NOT NULL, saved_at INTEGER NOT NULL, digest TEXT NOT NULL, list TEXT NOT NULL")
 	statement.WriteString(scopeColumn)
 	statement.WriteString(");\nCREATE TABLE bodies (url TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;\n")
-	statement.WriteString("INSERT INTO dashboard (identity, saved_at, digest, list")
-	statement.WriteString(scopeColumnName(s.Scope))
+	statement.WriteString("INSERT INTO ")
+	statement.WriteString(table)
+	statement.WriteString(" (identity, saved_at, digest, list")
+	statement.WriteString(scopeColumnName(scope))
 	statement.WriteString(") VALUES (")
 	statement.WriteString(sqlLiteral(identity))
-	statement.WriteString(", unixepoch(), ")
-	statement.WriteString(sqlLiteral(digest))
-	statement.WriteString(", ")
+	// Older releases expect the digest column; this backend does not read it.
+	statement.WriteString(", unixepoch(), '', ")
 	statement.WriteString(sqlLiteral(string(listJSON)))
 	statement.WriteString(scopeValue)
 	statement.WriteString(");\n")
-	for _, value := range items {
-		if value.Body == nil || value.UID == "" {
-			continue
+	if saveBodies {
+		for _, value := range items {
+			if value.Body == nil || value.UID == "" {
+				continue
+			}
+			bodyJSON, marshalErr := json.Marshal(*value.Body)
+			if marshalErr != nil {
+				return fmt.Errorf("encode description for %q: %w", value.UID, marshalErr)
+			}
+			statement.WriteString("INSERT INTO bodies VALUES (")
+			statement.WriteString(sqlLiteral(value.UID))
+			statement.WriteString(", ")
+			statement.WriteString(sqlLiteral(string(bodyJSON)))
+			statement.WriteString(");\n")
 		}
-		bodyJSON, marshalErr := json.Marshal(*value.Body)
-		if marshalErr != nil {
-			return fmt.Errorf("encode description for %q: %w", value.UID, marshalErr)
-		}
-		statement.WriteString("INSERT INTO bodies VALUES (")
-		statement.WriteString(sqlLiteral(value.UID))
-		statement.WriteString(", ")
-		statement.WriteString(sqlLiteral(string(bodyJSON)))
-		statement.WriteString(");\n")
 	}
 	statement.WriteString("COMMIT;\n")
 	if _, err := sqlite(ctx, temporary, false, false, statement.String()); err != nil {
 		return err
 	}
 	if err := os.Chmod(temporary, 0600); err != nil {
-		return fmt.Errorf("protect dashboard cache: %w", err)
+		return fmt.Errorf("protect %s cache: %w", table, err)
 	}
-	if err := os.Rename(temporary, s.Path); err != nil {
-		return fmt.Errorf("publish dashboard cache: %w", err)
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("publish %s cache: %w", table, err)
 	}
 	return nil
 }

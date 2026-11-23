@@ -82,6 +82,30 @@
                 <key>trim</key><true/>
             </dict>
         </dict>
+        <dict>
+            <key>type</key><string>slider</string>
+            <key>label</key><string>Dashboard results per search</string>
+            <key>variable</key><string>hubfred_dashboard_limit</string>
+            <key>description</key><string>Maximum number of open results in each dashboard.</string>
+            <key>config</key>
+            <dict>
+                <key>defaultvalue</key><integer>100</integer>
+                <key>minvalue</key><integer>1</integer>
+                <key>maxvalue</key><integer>1000</integer>
+            </dict>
+        </dict>
+        <dict>
+            <key>type</key><string>slider</string>
+            <key>label</key><string>Dashboard updated within (days)</string>
+            <key>variable</key><string>hubfred_dashboard_days</string>
+            <key>description</key><string>Only include items updated within this many days; 0 means unrestricted.</string>
+            <key>config</key>
+            <dict>
+                <key>defaultvalue</key><integer>0</integer>
+                <key>minvalue</key><integer>0</integer>
+                <key>maxvalue</key><integer>36500</integer>
+            </dict>
+        </dict>
     </array>
     <key>connections</key>
     <dict>
@@ -172,7 +196,7 @@
                 <key>title</key><string>hubfred: Pull Requests</string>
                 <key>subtext</key><string>PRs you authored or were asked to review</string>
                 <key>runningsubtext</key><string>Searching GitHub…</string>
-                <key>script</key><string>/bin/bash search.sh cached-picker prs "${1:-}"</string>
+                <key>script</key><string>/bin/bash prs.alfredui/load.sh picker prs "${1:-}"</string>
                 <key>scriptargtype</key><integer>1</integer>
                 <key>type</key><integer>0</integer>
             </dict>
@@ -222,7 +246,7 @@
                 <key>title</key><string>hubfred: Issues</string>
                 <key>subtext</key><string>Open issues you are involved in</string>
                 <key>runningsubtext</key><string>Searching GitHub…</string>
-                <key>script</key><string>/bin/bash search.sh cached-picker issues "${1:-}"</string>
+                <key>script</key><string>/bin/bash prs.alfredui/load.sh picker issues "${1:-}"</string>
                 <key>scriptargtype</key><integer>1</integer>
                 <key>type</key><integer>0</integer>
             </dict>
@@ -263,7 +287,7 @@
                 <key>title</key><string>hubfred: Pull Requests and Issues</string>
                 <key>subtext</key><string>Open PRs and issues you are involved in</string>
                 <key>runningsubtext</key><string>Searching GitHub…</string>
-                <key>script</key><string>/bin/bash search.sh cached-picker all "${1:-}"</string>
+                <key>script</key><string>/bin/bash prs.alfredui/load.sh picker all "${1:-}"</string>
                 <key>scriptargtype</key><integer>1</integer>
                 <key>type</key><integer>0</integer>
             </dict>

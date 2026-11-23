@@ -2,7 +2,7 @@
 
 ## Local Development
 
-The workflow requires macOS 15 or later to run. The package can also be built on Linux, as in CI. Build from the repository root using Node.js 24, npm, and `zip`; Node.js is build and test tooling only, and the packaged workflow does not require Node.js. Run `npm ci` on the first setup and whenever the lockfile changes.
+The workflow requires macOS 15 or later to run. Build from the repository root with Go 1.24 or later, Node.js 24, npm, and `zip`. The build also works on Linux: Go cross-compiles the workflow backend for Apple Silicon and Intel Macs. The packaged workflow does not require Go or Node.js. Run `npm ci --ignore-scripts` on the first setup and when the lockfile changes.
 
 ```bash
 npm ci --ignore-scripts
@@ -12,7 +12,9 @@ open dist/hubfred.alfredworkflow
 
 `npm test` runs the package build before executing tests. Use `npm run package` directly when you only need to build a distributable archive, including on Linux.
 
-`npm run package` reads files under `workflow/` from the working tree for files tracked in the Git index, so it includes uncommitted changes to existing files. Newly added files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution. TypeScript sources under `scripts/` are type-checked with `npm run typecheck` and bundled into the generated JXA renderer in package staging; neither TypeScript source nor development tooling is included in the workflow. ES2020 is a JXA compatibility target matching the original syntax, not a Node.js target.
+`npm run package` packages the present, tracked files under `workflow/`, including uncommitted edits and excluding files removed from the working tree. Newly added workflow files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution. TypeScript sources under `scripts/` are type-checked with `npm run typecheck` and bundled into the generated JXA renderer in package staging; neither TypeScript source nor development tooling is included in the workflow. ES2020 is a JXA compatibility target matching the original syntax, not a Node.js target.
+
+The picker and dashboard share the Go backend in [`cmd/dashboard`](cmd/dashboard), including authentication, search, and SQLite snapshots. `load.sh` selects the native binary for this Mac. Alfred still drives the UI events, and the Markdown preview still renders through JXA.
 
 On macOS 15 or later, `npm test` builds the package and exercises search formatting, dashboard refresh decisions, and the production JXA Markdown renderer from that package with the locked Marked library. It also tests the sanitizer directly through Foundation in a test-only bundle. The sanitizer wrapper declares UTF-8 before its body because Foundation's TidyHTML parser needs the charset before parsing non-ASCII Markdown. Tests use synthetic GitHub CLI responses and do not require GitHub credentials or Alfred.
 
@@ -39,7 +41,8 @@ During capture, the script backs up installed production workflows under the cur
 
 ## Runtime Behavior
 
-- Searches run in parallel for each participation category. With no query, the `pr`, `is`, and `gh` pickers fetch up to 10 results per category. The `prs`, `iss`, and `ghs` dashboards fetch up to 1,000 results per category (the GitHub Search limit per query). With a query, a picker reads or refreshes its corresponding dashboard cache and filters the broader list before taking the latest 10 matches. Results are deduplicated and sorted by update time. `gh` and `ghs` run both the PR and issue searches. Update times are shown in the Mac's local time.
+- Searches run in parallel for each participation category. Without a query, pickers fetch up to 10 results per category. With a query, they filter a broad snapshot before taking the latest 10 matches. Dashboards fetch up to the configured limit per category (100 by default, at most 1,000), optionally restricted by last update time. They display the merged first pages before fetching remaining pages and saving. Results are deduplicated by URL and sorted by update time. `gh` and `ghs` run both PR and issue searches. Update times use the Mac's local time.
+- When GitHub reports that the search quota is exhausted, the dashboard waits for the reset or retry time before continuing. If a page still fails or GitHub marks it incomplete, the dashboard does not save the refresh as a complete snapshot.
 - The bundled [Marked](https://github.com/markedjs/marked) converts GFM for display in WebKit. Marked's output is reconstructed from allowed elements, attributes, and URLs; arbitrary raw HTML is not passed through, and images are shown as links instead of loaded inline. Conversion allows up to 128 KiB of UTF-8 input on stdin, 128 columns per GFM table, 8,192 table cells across the document (including headers and cells added to fill short rows), and 512 KiB of UTF-8 HTML output. If conversion exceeds any of these limits or times out after 2 seconds, the preview directs readers to open the item on GitHub.
 
 ## Cache Strategy
