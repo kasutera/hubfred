@@ -111,11 +111,16 @@ BASH
     | .objects |= map(select(.uid as $id | $unused | index($id) | not))
     | .connections |= with_entries(select(.value[0].destinationuid as $id | $unused | index($id) | not))
     | .uidata |= with_entries(select(.key as $id | $unused | index($id) | not))
-    | (.objects[] | select(.config.keyword == "pr" or .config.keyword == "is" or .config.keyword == "gh").config.keyword) += "-demo"
-    | (.objects[] | select(.config.keyword == "prs" or .config.keyword == "iss" or .config.keyword == "ghs")) |= (
-        .config.keyword as $keyword
-        | .type = "alfred.workflow.trigger.external"
-        | .config = {triggerid: ({prs: "pr-dashboard", iss: "issue-dashboard", ghs: "github-dashboard"}[$keyword]), availableviaurlhandler: false}
+    | (.userconfigurationconfig | map({key: ("{var:" + .variable + "}"), value: .config.default}) | from_entries) as $defaults
+    | del(.userconfigurationconfig)
+    | .objects |= map(
+        ($defaults[.config.keyword // ""] // "") as $keyword
+        | if .type == "alfred.workflow.input.scriptfilter" and $keyword != "" then
+            .config.keyword = ($keyword + "-demo")
+          elif .type == "alfred.workflow.input.keyword" and $keyword != "" then
+            .type = "alfred.workflow.trigger.external"
+            | .config = {triggerid: ({prs: "pr-dashboard", iss: "issue-dashboard", ghs: "github-dashboard"}[$keyword]), availableviaurlhandler: false}
+          else . end
     )
 ' > "$work/info.json"
 /usr/bin/plutil -convert xml1 -o "$payload/info.plist" "$work/info.json"
@@ -156,8 +161,13 @@ for ((index = 0; index < production_count; index++)); do
     /bin/cp -p "${production_paths[$index]}" "$production_backup"
     production_backups[$index]=$production_backup
     /usr/bin/plutil -convert json -o - "$production_backup" | /usr/bin/jq '
-        (.objects[] | select(.config.keyword == "pr" or .config.keyword == "is" or .config.keyword == "gh").config.keyword)
-        |= ("hubfred-capture-disabled-" + .)
+        .objects |= map(
+            if ((.type == "alfred.workflow.input.scriptfilter" or .type == "alfred.workflow.input.keyword")
+                and (.config | has("keyword")))
+            then .config.keyword = "hubfred-capture-disabled-" + (.uid | ascii_downcase)
+            else .
+            end
+        )
     ' > "$work/production-$index.json"
 done
 if ((production_count > 0)); then
@@ -169,7 +179,7 @@ if ((production_count > 0)); then
 fi
 
 /usr/bin/plutil -convert json -o - "$payload/info.plist" | /usr/bin/jq '
-    (.objects[] | select(.config.keyword == "pr-demo" or .config.keyword == "is-demo" or .config.keyword == "gh-demo").config.keyword)
+    (.objects[] | select(.type == "alfred.workflow.input.scriptfilter").config.keyword)
     |= rtrimstr("-demo")
 ' > "$work/demo.json"
 /usr/bin/plutil -convert xml1 -o "$installed/info.plist" "$work/demo.json"

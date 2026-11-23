@@ -12,6 +12,8 @@ In Terminal, sign in to GitHub.com:
 gh auth login --hostname github.com
 ```
 
+To avoid conflicts with other workflows, change the picker and dashboard keywords in Alfred’s **Configure Workflow** window. The examples below use the defaults.
+
 ## Usage
 
 Search the open pull requests and issues that involve you via the `gh` keyword.
