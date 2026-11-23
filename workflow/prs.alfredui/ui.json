@@ -1,6 +1,10 @@
 {
   "variablesconfig": {
-    "dashboard_kind": {"default": "prs", "src": "variable", "scriptenv": true}
+    "dashboard_kind": {"default": "prs", "src": "variable", "scriptenv": true},
+    "hubfred_dashboard_limit": {"src": "variable", "scriptenv": true},
+    "hubfred_dashboard_days": {"src": "variable", "scriptenv": true},
+    "dashboard_session": {"scriptenv": true},
+    "dashboard_selection": {"scriptenv": true}
   },
   "window": {
     "size": {"width": 1160, "height": 690},
@@ -14,7 +18,8 @@
       "spacing": 12,
       "events": [
         {"triggers": "preload", "action": {"type": "script", "src": "load.sh", "args": ["cached"]}},
-        {"triggers": "launched", "action": {"type": "script", "src": "load.sh", "args": ["refresh"], "async": true}}
+        {"triggers": "launched", "action": {"type": "script", "src": "load.sh", "args": ["first"], "async": true}},
+        {"triggers": "quit", "action": {"type": "script", "src": "load.sh", "args": ["quit"]}}
       ],
       "shortcuts": [
         {"shortcut": "↑", "action": {"type": "function", "src": "prs", "args": "selectup"}},
@@ -37,7 +42,8 @@
                 {"triggers": "changed", "action": {"type": "function", "src": "prs", "args": "filterdata"}},
                 {"triggers": "actioned", "action": {"type": "script", "src": "open.sh", "args": ["{value:prs.selected.uid}"]}}
               ]
-            }
+            },
+            {"id": "loadstatus", "type": "label", "text": "", "constraints": {"region": "right"}}
           ]
         },
         {
@@ -70,7 +76,7 @@
             {
               "triggers": "changed",
               "action": {
-                "type": "script", "src": "preview.sh", "args": ["{value:prs.selected.uid}"]
+                "type": "script", "src": "load.sh", "args": ["preview", "{value:prs.selected.uid}", "{value:prs.selected.previewState}"]
               }
             },
             {"triggers": ["actioned", "doubleclicked"], "action": {"type": "script", "src": "open.sh", "args": ["{value:prs.selected.uid}"]}}

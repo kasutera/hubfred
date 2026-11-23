@@ -75,36 +75,23 @@ fi
 npm run package
 payload="$work/workflow"
 /usr/bin/unzip -q dist/hubfred.alfredworkflow -d "$payload"
-/bin/cp scripts/screenshots/fixtures.json "$payload/fixtures.json"
-/bin/mv "$payload/search.sh" "$payload/search-live.sh"
-/bin/cat > "$payload/search.sh" <<'BASH'
+/bin/mv "$payload/prs.alfredui/load.sh" "$payload/prs.alfredui/load-live.sh"
+/bin/mkdir "$payload/demo-bin"
+/bin/cp scripts/screenshots/fixtures.json "$payload/demo-bin/"
+/usr/bin/install -m 755 scripts/screenshots/gh "$payload/demo-bin/gh"
+/bin/cat > "$payload/prs.alfredui/load.sh" <<'BASH'
 #!/bin/bash
 set -euo pipefail
-cd -- "$(dirname -- "$0")"
-export TZ=UTC alfred_workflow_cache="$HOME/Library/Caches/org.hubfred.screenshots"
-gh() {
-    local expected_limit
-    case "$mode" in
-        picker) expected_limit=10 ;;
-        dashboard) expected_limit=1000 ;;
-        *) return 2 ;;
-    esac
-    [[ "$#" == 11 && "$1" == search && "$4 $5 $6 $7 $8 $9 ${10}" == "--state open --sort updated --limit $expected_limit --json" ]] || return 2
-    /usr/bin/jq -ce --arg kind "$2" --arg query "$3" --argjson limit "$9" '
-        (.[$kind][$query] // error("Unexpected screenshot query"))[:$limit]
-    ' fixtures.json
-}
-source ./search-live.sh
+entry_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
+demo_bin="$entry_dir/../demo-bin"
+[[ -x "$demo_bin/gh" ]] || exit 1
+checksum=$(/usr/bin/shasum -a 256 "$demo_bin/fixtures.json")
+export GH_TOKEN="${checksum%% *}" TZ=UTC
+export alfred_workflow_cache="$HOME/Library/Caches/org.hubfred.screenshots"
+export PATH="$demo_bin:/usr/bin:/bin"
+exec /bin/bash "$entry_dir/load-live.sh" "$@"
 BASH
-# Pickers and dashboards share this private cache root and synthetic credential.
-/usr/bin/shasum -a 256 "$payload/fixtures.json" | {
-    read -r checksum _
-    printf 'export GH_TOKEN=%s\n' "$checksum"
-    printf '%s\n' 'export alfred_workflow_cache="$HOME/Library/Caches/org.hubfred.screenshots"'
-} > "$work/cache-prefix"
-/bin/cat "$work/cache-prefix" "$payload/prs.alfredui/cache.sh" > "$work/cache.sh"
-/bin/mv "$work/cache.sh" "$payload/prs.alfredui/cache.sh"
-
+/bin/chmod 755 "$payload/prs.alfredui/load.sh"
 /usr/bin/plutil -convert json -o - "$payload/info.plist" | /usr/bin/jq --arg bundle "$bundle" '
     .bundleid = $bundle | .name = "hubfred screenshots" | .readme = "Offline screenshot fixtures only."
     | ([.objects[] | select(.type == "alfred.workflow.action.openurl") | .uid]) as $unused

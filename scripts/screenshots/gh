@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+
+case "$*" in
+    'api user --jq .login') printf '%s\n' demo-user; exit ;;
+    'api --include --method GET search/issues '*) ;;
+    *) exit 2 ;;
+esac
+
+query=
+page=1
+per_page=100
+for arg in "$@"; do
+    case "$arg" in
+        q=*) query=${arg#q=} ;;
+        page=*) page=${arg#page=} ;;
+        per_page=*) per_page=${arg#per_page=} ;;
+    esac
+done
+
+fixtures="$(dirname -- "$0")/fixtures.json"
+printf 'HTTP/2.0 200 OK\r\n\r\n'
+/usr/bin/jq -ce --arg query "$query" --argjson page "$page" --argjson per_page "$per_page" '
+    .[$query] // error("Unexpected screenshot query: " + $query)
+    | {total_count: length, incomplete_results: false,
+        items: .[($page - 1) * $per_page:$page * $per_page]}
+' "$fixtures"
