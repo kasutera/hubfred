@@ -46,7 +46,7 @@ Filter open issues by involvement or label and preview the selected description 
 
 For a picker (`gh`, `pr`, or `is`), type a space after the keyword. Pickers show up to 10 results, newest updates first. A query filters a broader GitHub snapshot before taking the latest 10 matches. Dashboard limits do not narrow picker searches.
 
-For a dashboard (`ghs`, `prs`, or `iss`), press <kbd>↩</kbd> after typing the keyword. In **Configure Workflow**, set **Dashboard results per search** (default 100, before deduplication) and **Dashboard updated within (days)** (`0` means no date limit). Dashboards can show recent picker results while fetching their first pages, then add any remaining results.
+For a dashboard (`ghs`, `prs`, or `iss`), press <kbd>↩</kbd> after typing the keyword. In **Configure Workflow**, choose **Dashboard results per search** (10, 25, 50, 100, 200, 500, or 1,000 per category before deduplication; default 100) and **Dashboard update period** (no limit, or the last 7, 30, 90, or 365 days; default no limit). Dashboards can show recent picker results while fetching their first pages, then add any remaining results.
 
 Search by title, repository, or number. In pickers, you can omit the owner and enter the start of a repository name. Press <kbd>↩</kbd> on a result to open it on GitHub.
 
