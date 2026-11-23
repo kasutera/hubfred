@@ -46,6 +46,10 @@ See [Cache Strategy](docs/cache-strategy.md) for cache performance and security 
 
 ## CI and Releases
 
-Dependabot PRs and pushes to `main` generate an `.alfredworkflow` file that can be downloaded as an Actions artifact. Bundled files do not need to be updated manually.
+Pull requests and pushes to `main` generate an `.alfredworkflow` file that can be downloaded as an Actions artifact. Bundled files do not need to be updated manually.
 
-To publish a release, update `version` in `workflow/info.plist`, then push a `v`-prefixed tag with the same version. The release is published on GitHub Releases. It will not be published if the tag and workflow versions do not match. The distribution includes the app and the Octicons and Marked licenses.
+On GitHub, open **Actions → Release hubfred → Run workflow**, select `main`, and enter the next `major.minor.patch` without the `v` prefix. The version must be greater than the version in `workflow/info.plist`.
+
+The workflow commits the version update, tests and packages that commit, then pushes `main` and `v<version>` together before publishing the `.alfredworkflow` on GitHub Releases. It stops without updating either ref if `main` changed or the tag already exists. The repository must allow the workflow's `GITHUB_TOKEN` to push to `main` and create version tags; no separate token is used.
+
+If the push succeeds but publishing fails, download `hubfred.alfredworkflow` from the run's artifact and attach it to a GitHub Release for the existing tag. Do not move or recreate the tag. The existing tag-push release workflow is also available for tags pushed manually.
