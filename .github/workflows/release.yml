@@ -1,0 +1,80 @@
+name: Release hubfred
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New Alfred version (major.minor.patch, without v)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Commit the requested Alfred version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import plistlib
+          import re
+
+          path = Path('workflow/info.plist')
+          source = path.read_bytes()
+          current = plistlib.loads(source)['version']
+          version = os.environ['VERSION']
+          if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
+              raise SystemExit('Enter a version in major.minor.patch format without a v prefix.')
+          if tuple(map(int, version.split('.'))) <= tuple(map(int, current.split('.'))):
+              raise SystemExit(f'The new version must be greater than {current}.')
+          updated, count = re.subn(
+              rb'(<key>version</key>\s*<string>)' + re.escape(current.encode()) + rb'(</string>)',
+              lambda match: match[1] + version.encode() + match[2], source,
+          )
+          if count != 1 or plistlib.loads(updated)['version'] != version:
+              raise SystemExit('Could not update the top-level Alfred version exactly once.')
+          path.write_bytes(updated)
+          PY
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "chore: release v$VERSION" -- workflow/info.plist
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hubfred.alfredworkflow
+          path: dist/hubfred.alfredworkflow
+          if-no-files-found: error
+      - name: Push the tested commit and tag together
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          test "$(git rev-parse HEAD^)" = "$GITHUB_SHA"
+          tag="refs/tags/v$VERSION"
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+              push --atomic --force-with-lease="refs/heads/main:$GITHUB_SHA" \
+              --force-with-lease="$tag:" origin HEAD:refs/heads/main "HEAD:$tag"
+      - name: Publish the tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: gh release create "v$VERSION" dist/hubfred.alfredworkflow --verify-tag --generate-notes
