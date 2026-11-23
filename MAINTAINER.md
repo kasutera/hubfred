@@ -29,7 +29,9 @@ open dist/hubfred-screenshots.alfredworkflow
 npm run screenshots
 ```
 
-Run `--prepare` and import the workflow only once. `--prepare` only builds the archive; it does not take screenshots, change Alfred settings, or quit Alfred. On subsequent runs, `npm run screenshots` updates the screenshot-only workflow and writes six PNGs to `docs/screenshots/`: pickers and dashboards for PRs, issues, and both together. Any PR that changes the workflow's appearance must rerun `npm run screenshots` and include the regenerated screenshots. If Alfred settings are synced, set `HUBFRED_ALFRED_WORKFLOWS` to the synced `Alfred.alfredpreferences/workflows` directory. The command does not migrate or remove older workflows or artifacts.
+Run `--prepare` and import the workflow only once. `--prepare` only builds the archive; it does not take screenshots, change Alfred settings, or quit Alfred. On subsequent runs, `npm run screenshots` updates the screenshot-only workflow and writes six PNGs to `docs/screenshots/`: pickers and dashboards for PRs, issues, and both together. Any PR that changes the workflow's appearance must rerun `npm run screenshots` and include the regenerated screenshots. If Alfred settings are synced, set `HUBFRED_ALFRED_WORKFLOWS` to the synced `Alfred.alfredpreferences/workflows` directory. The command does not migrate workflows under other bundle IDs or remove older artifacts.
+
+After updating the installed demo runtime, the command leaves its matching workflow configuration in place, with the `-demo` picker keywords restored. If the runtime update fails before it completes, it restores the previous demo directory instead.
 
 For editor-only changes to `uidata` in `workflow/info.plist`, verify the node layout in Alfred Preferences. The README screenshots show the pickers and dashboards, not the workflow editor.
 
