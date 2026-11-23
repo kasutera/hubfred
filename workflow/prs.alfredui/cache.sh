@@ -163,10 +163,25 @@ cache_read() {
     seconds=${raw%%$'\n'*}
     list=${raw#*$'\n'}
     [[ "$seconds" =~ ^-?[0-9]+$ && -n "$list" ]] || return 0
+    if (( seconds < 0 )); then return 0; fi
     cached=$(/usr/bin/jq -c '
-        if type == "object" and (.items == null or (.items | type == "array")) and all(.items[]?; type == "object")
+        if type == "object"
+            and (.items == null or (.items | type == "array"))
+            and all(.items[]?;
+                type == "object"
+                and (.uid | type == "string" and length > 0)
+                and (.arg | type == "string" and length > 0)
+                and (.title | type == "string")
+                and (.subtitle | type == "string")
+                and (.match | type == "string")
+                and (.icon | type == "object" and (.path | type == "string"))
+                and (.updatedAt == null or (.updatedAt | type == "string"))
+                and (.kind == null or (.kind | type == "string"))
+                and (.reasons == null or (.reasons | type == "array" and all(.[]; type == "string")))
+                and (.labels == null or (.labels | type == "array" and all(.[]; type == "string")))
+            )
         then {items: [(.items // [])[] | del(.body)]}
-        else error("expected an object containing an item array") end
+        else error("expected an object containing valid item rows") end
     ' <<< "$list" 2>/dev/null) || {
         cached='{"items":[]}'
         return 0

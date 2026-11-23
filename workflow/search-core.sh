@@ -62,13 +62,163 @@ _hubfred_search_gh() {
         GH_TOKEN="$token" GITHUB_TOKEN= GH_HOST=github.com GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1 gh "$@"
     fi
 }
+_hubfred_search_exec_gh() {
+    if [ -n "${gh_path:-}" ]; then
+        GH_TOKEN="$token" GITHUB_TOKEN= GH_HOST=github.com GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1 exec "$gh_path" "$@"
+    else
+        GH_TOKEN="$token" GITHUB_TOKEN= GH_HOST=github.com GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1 exec gh "$@"
+    fi
+}
+
+_hubfred_search_tracked_child() {
+    local status
+    _hubfred_search_child_pending=1
+    "$@" &
+    _hubfred_search_active_child=$!
+    _hubfred_search_child_pending=0
+    if [ "${_hubfred_search_cancel_requested:-0}" -ne 0 ]; then
+        kill -TERM "$_hubfred_search_active_child" 2>/dev/null || :
+        wait "$_hubfred_search_active_child" 2>/dev/null || :
+        _hubfred_search_active_child=
+        exit 143
+    fi
+    if wait "$_hubfred_search_active_child"; then
+        status=0
+    else
+        status=$?
+    fi
+    _hubfred_search_active_child=
+    return "$status"
+}
+
+_hubfred_search_worker_exit() {
+    local status="$1"
+    trap - EXIT
+    if [ -n "${_hubfred_search_active_child:-}" ]; then
+        kill -TERM "$_hubfred_search_active_child" 2>/dev/null || :
+        wait "$_hubfred_search_active_child" 2>/dev/null || :
+        _hubfred_search_active_child=
+    fi
+    printf '%s\n' "$status" > "$_hubfred_search_worker_status_path" || :
+}
+
+_hubfred_search_worker_signal() {
+    [ "${_hubfred_search_signal_handling:-0}" -eq 0 ] || return 0
+    _hubfred_search_signal_handling=1
+    _hubfred_search_cancel_requested=1
+    if [ -n "${_hubfred_search_active_child:-}" ]; then
+        kill -TERM "$_hubfred_search_active_child" 2>/dev/null || :
+        wait "$_hubfred_search_active_child" 2>/dev/null || :
+        _hubfred_search_active_child=
+    fi
+    if [ "${_hubfred_search_child_pending:-0}" -eq 0 ]; then
+        trap - INT TERM
+        exit 143
+    fi
+    _hubfred_search_signal_handling=0
+}
+
+_hubfred_search_worker() {
+    local phase="$1" status_path="$2"
+    shift 2
+    _hubfred_search_worker_status_path="$status_path"
+    _hubfred_search_active_child=
+    _hubfred_search_child_pending=0
+    _hubfred_search_cancel_requested=0
+    _hubfred_search_signal_handling=0
+    trap '_hubfred_search_worker_exit "$?"' EXIT
+    trap '_hubfred_search_worker_signal' INT TERM
+    case "$phase" in
+        first) _hubfred_search_first_category "$@" ;;
+        more) _hubfred_search_more_category "$@" ;;
+        *) return 1 ;;
+    esac
+}
+
+_hubfred_search_cancel_workers() {
+    local index pid
+    for index in "${!pids[@]}"; do
+        pid="${pids[$index]}"
+        [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || :
+    done
+    for index in "${!pids[@]}"; do
+        pid="${pids[$index]}"
+        if [ -n "$pid" ]; then
+            wait "$pid" 2>/dev/null || :
+            pids[$index]=
+        fi
+    done
+    for index in "${!worker_status_files[@]}"; do
+        rm -f "${worker_status_files[$index]}" 2>/dev/null || :
+    done
+}
+
+_hubfred_search_parallel_signal() {
+    _hubfred_search_parallel_interrupted=1
+    trap '' INT TERM
+    _hubfred_search_cancel_workers
+}
+
+_hubfred_search_restore_signal_traps() {
+    local old_int_trap="$1" old_term_trap="$2"
+    if [ -n "$old_int_trap" ]; then eval "$old_int_trap"; else trap - INT; fi
+    if [ -n "$old_term_trap" ]; then eval "$old_term_trap"; else trap - TERM; fi
+}
+
+_hubfred_search_wait_workers() {
+    local index pid worker_status active
+    while :; do
+        if [ "$_hubfred_search_parallel_interrupted" -ne 0 ]; then
+            _hubfred_search_cancel_workers
+            return 1
+        fi
+        active=0
+        for index in "${!pids[@]}"; do
+            pid="${pids[$index]}"
+            [ -n "$pid" ] || continue
+            if [ -s "${worker_status_files[$index]}" ]; then
+                IFS= read -r worker_status < "${worker_status_files[$index]}" || worker_status=
+                if [ "$worker_status" != 0 ]; then
+                    _hubfred_search_cancel_workers
+                    return 1
+                fi
+                if wait "$pid"; then
+                    pids[$index]=
+                    if ! rm -f "${worker_status_files[$index]}"; then
+                        _hubfred_search_cancel_workers
+                        return 1
+                    fi
+                else
+                    pids[$index]=
+                    _hubfred_search_cancel_workers
+                    return 1
+                fi
+            elif ! kill -0 "$pid" 2>/dev/null && [ ! -s "${worker_status_files[$index]}" ]; then
+                wait "$pid" 2>/dev/null || :
+                pids[$index]=
+                _hubfred_search_cancel_workers
+                return 1
+            else
+                active=1
+            fi
+        done
+        [ "$active" -eq 1 ] || break
+        if ! /bin/sleep 0.01; then
+            _hubfred_search_cancel_workers
+            return 1
+        fi
+    done
+    [ "$_hubfred_search_parallel_interrupted" -eq 0 ]
+}
+
+
 
 _hubfred_search_lock() {
     local attempts=0
     while ! mkdir "$session/.search-pacer-lock" 2>/dev/null; do
         attempts=$((attempts + 1))
         if [ "$attempts" -ge 200 ]; then return 1; fi
-        /bin/sleep 0.01 || return 1
+        _hubfred_search_tracked_child /bin/sleep 0.01 || return 1
     done
 }
 
@@ -85,7 +235,7 @@ _hubfred_search_pacer_wait() {
         now=$(/bin/date +%s) || return 1
         if [ "$next" -le "$now" ]; then return 0; fi
         delay=$((next - now))
-        /bin/sleep "$delay" || return 1
+        if ! _hubfred_search_tracked_child /bin/sleep "$delay"; then return 1; fi
     done
 }
 
@@ -158,7 +308,7 @@ _hubfred_search_request_page() {
         fi
         raw=$(mktemp "$session/.search-response.XXXXXX") || return 1
         body=$(mktemp "$session/.search-body.XXXXXX") || { rm -f "$raw"; return 1; }
-        if _hubfred_search_gh api --include --method GET search/issues \
+        if _hubfred_search_tracked_child _hubfred_search_exec_gh api --include --method GET search/issues \
             -f "q=$query" -f sort=updated -f order=desc \
             -F "per_page=$per_page" -F "page=$page" > "$raw" 2>/dev/null; then
             command_status=0
@@ -426,8 +576,9 @@ _hubfred_search_format() {
 }
 
 search_first() {
-    local requested_limit cutoff_value login per_page index category_kind category_key query failed=0
-    local -a hubfred_search_qualifiers pids
+    local requested_limit cutoff_value login per_page index category_kind category_key query worker_status
+    local old_int_trap old_term_trap parallel_status
+    local -a hubfred_search_qualifiers pids worker_status_files categories queries
     _hubfred_search_categories "${kind:-}" || return 1
     _hubfred_search_validate_paths || return 1
     requested_limit=$(_hubfred_search_limit "${1:-}") || return 1
@@ -444,38 +595,86 @@ search_first() {
         printf 'GitHub returned an empty login\n' >&2
         return 1
     fi
-    pids=()
+    categories=()
+    queries=()
     for index in "${!hubfred_search_qualifiers[@]}"; do
         category_kind=$(_hubfred_search_category_kind "$kind" "$index") || return 1
         category_key="$category_kind:${hubfred_search_qualifiers[$index]}"
         query="is:$( [ "$category_kind" = prs ] && printf pr || printf issue ) is:open ${hubfred_search_qualifiers[$index]}:$login"
         [ -z "$cutoff_value" ] || query="$query updated:>=$cutoff_value"
-        _hubfred_search_first_category "$index" "$category_key" "$query" "$per_page" "$requested_limit" &
+        categories+=("$category_key")
+        queries+=("$query")
+    done
+    pids=()
+    worker_status_files=()
+    for index in "${!hubfred_search_qualifiers[@]}"; do
+        worker_status=$(mktemp "$session/.search-worker.XXXXXX") || {
+            for worker_status in "${worker_status_files[@]}"; do rm -f "$worker_status"; done
+            return 1
+        }
+        worker_status_files+=("$worker_status")
+    done
+    _hubfred_search_parallel_interrupted=0
+    old_int_trap=$(trap -p INT)
+    old_term_trap=$(trap -p TERM)
+    trap '_hubfred_search_parallel_signal' INT TERM
+    for index in "${!hubfred_search_qualifiers[@]}"; do
+        [ "$_hubfred_search_parallel_interrupted" -eq 0 ] || break
+        (_hubfred_search_worker first "${worker_status_files[$index]}" "$index" \
+            "${categories[$index]}" "${queries[$index]}" "$per_page" "$requested_limit") &
         pids+=("$!")
+        [ "$_hubfred_search_parallel_interrupted" -eq 0 ] || break
     done
-    for index in "${!pids[@]}"; do
-        if ! wait "${pids[$index]}"; then failed=1; fi
-    done
-    [ "$failed" -eq 0 ] || return 1
+    if _hubfred_search_wait_workers; then
+        parallel_status=0
+    else
+        parallel_status=$?
+    fi
+    _hubfred_search_restore_signal_traps "$old_int_trap" "$old_term_trap"
+    [ "$parallel_status" -eq 0 ] || return 1
     _hubfred_search_format true
 }
 
 search_more() {
-    local requested_limit index category_kind category_key failed=0
-    local -a hubfred_search_qualifiers pids
+    local requested_limit index category_kind category_key worker_status
+    local old_int_trap old_term_trap parallel_status
+    local -a hubfred_search_qualifiers pids worker_status_files categories
     _hubfred_search_categories "${kind:-}" || return 1
     _hubfred_search_validate_paths || return 1
     requested_limit=$(_hubfred_search_limit "${1:-}") || return 1
-    pids=()
+    categories=()
     for index in "${!hubfred_search_qualifiers[@]}"; do
         category_kind=$(_hubfred_search_category_kind "$kind" "$index") || return 1
         category_key="$category_kind:${hubfred_search_qualifiers[$index]}"
-        _hubfred_search_more_category "$index" "$category_key" "$requested_limit" &
+        categories+=("$category_key")
+    done
+    pids=()
+    worker_status_files=()
+    for index in "${!hubfred_search_qualifiers[@]}"; do
+        worker_status=$(mktemp "$session/.search-worker.XXXXXX") || {
+            for worker_status in "${worker_status_files[@]}"; do rm -f "$worker_status"; done
+            return 1
+        }
+        worker_status_files+=("$worker_status")
+    done
+    _hubfred_search_parallel_interrupted=0
+    old_int_trap=$(trap -p INT)
+    old_term_trap=$(trap -p TERM)
+    trap '_hubfred_search_parallel_signal' INT TERM
+    for index in "${!hubfred_search_qualifiers[@]}"; do
+        [ "$_hubfred_search_parallel_interrupted" -eq 0 ] || break
+        (_hubfred_search_worker more "${worker_status_files[$index]}" "$index" \
+            "${categories[$index]}" "$requested_limit") &
         pids+=("$!")
+        [ "$_hubfred_search_parallel_interrupted" -eq 0 ] || break
     done
-    for index in "${!pids[@]}"; do
-        if ! wait "${pids[$index]}"; then failed=1; fi
-    done
-    [ "$failed" -eq 0 ] || return 1
+    if _hubfred_search_wait_workers; then
+        parallel_status=0
+    else
+        parallel_status=$?
+    fi
+    _hubfred_search_restore_signal_traps "$old_int_trap" "$old_term_trap"
+    [ "$parallel_status" -eq 0 ] || return 1
     _hubfred_search_format false
 }
+

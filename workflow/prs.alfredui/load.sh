@@ -153,7 +153,7 @@ if [[ "$phase" == cached ]]; then
     if (( age >= CACHE_FRESH_SECONDS )); then
         if ! session=$(/usr/bin/mktemp -d "$temp_root/hubfred-dashboard.XXXXXXXX"); then emit_failure; exit 0; fi
         trap cleanup EXIT
-        printf '%s\n' "$identity" "$kind:$limit:$days" "$cutoff" > "$session/scope"
+        if ! printf '%s\n' "$identity" "$kind:$limit:$days" "$cutoff" > "$session/scope"; then emit_failure; exit 0; fi
     fi
     if (( age >= CACHE_STALE_SECONDS )); then
         rows=$(picker_fallback) state=pending

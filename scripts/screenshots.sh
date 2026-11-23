@@ -13,6 +13,7 @@ production_backups=()
 production_count=0
 installed=
 capture_started=false
+demo_overlay_complete=false
 restore_demo=false
 restore_production=false
 
@@ -24,7 +25,13 @@ cleanup() {
     local status=$? restore_failed=false
     trap '' INT TERM HUP
     if $restore_demo; then
-        /bin/cp "$work/demo-original.plist" "$installed/info.plist" && reload "$bundle" || restore_failed=true
+        if $demo_overlay_complete; then
+            /bin/cp "$work/demo-baseline.plist" "$installed/info.plist" && reload "$bundle" || restore_failed=true
+        elif /bin/rm -r "$installed" && /usr/bin/ditto "$work/demo-original" "$installed"; then
+            reload "$bundle" || restore_failed=true
+        else
+            restore_failed=true
+        fi
     fi
     if $restore_production; then
         local index
@@ -146,9 +153,12 @@ if [[ -z "$installed" ]]; then
 fi
 
 /bin/mkdir "$work/images"
-/bin/cp -p "$installed/info.plist" "$work/demo-original.plist"
+# Roll back the complete demo if the runtime overlay does not finish.
+/usr/bin/ditto "$installed" "$work/demo-original"
+/bin/cp -p "$payload/info.plist" "$work/demo-baseline.plist"
 restore_demo=true
 /usr/bin/ditto "$payload" "$installed"
+demo_overlay_complete=true
 for ((index = 0; index < production_count; index++)); do
     production_backup="$work/production-$index.plist"
     /bin/cp -p "${production_paths[$index]}" "$production_backup"

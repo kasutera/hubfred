@@ -264,6 +264,41 @@ test('a fresh empty snapshot from the Go release does not trigger a search', t =
     assert.equal(picker.searchCount(), 0);
 });
 
+test('dashboard replaces a malformed fresh snapshot with fetched rows', t => {
+    const testCase = scenario(t, {
+        age: 0, cachedRows: [{...oldItem, labels: 'bug'}], searchFails: false
+    });
+    const cached = testCase.run('cached');
+    assert.equal(cached.update.ids.prs, undefined);
+    assert.deepEqual(testCase.run('first').update.ids.prs.data.src.map(row => row.uid), [fetchedItem.url]);
+    assert.equal(testCase.run('save').update.ids.prs.data.src[0].previewState, 'ready');
+});
+
+test('picker discards a snapshot saved in the future', t => {
+    const testCase = scenario(t, {mode: 'picker', age: -3600, searchFails: false});
+    const output = testCase.run();
+    assert.deepEqual(output.items.map(row => row.uid), [fetchedItem.url]);
+    assert.equal(testCase.searchCount(), 2);
+});
+
+test('dashboard reports a scope write failure without leaving a refresh session', t => {
+    const testCase = scenario(t);
+    const tempDirectory = path.dirname(testCase.cacheDir);
+    const shellHook = path.join(tempDirectory, 'fail-scope-write.sh');
+    writeFileSync(shellHook, `
+printf() {
+    if [[ $# == 4 && $3 == prs:1000:0 ]]; then return 1; fi
+    builtin printf "$@"
+}
+`);
+    const output = testCase.run('cached', {BASH_ENV: shellHook});
+    assertRefreshFailure(output);
+    assert.equal(output.variables?.dashboard_session, undefined);
+    assert.ok(!readdirSync(tempDirectory).some(name => name.startsWith('hubfred-dashboard.')));
+    assert.deepEqual(testCase.run('first'), {});
+    assert.equal(testCase.searchCount(), 0);
+});
+
 test('does not show older cached data after switching to another auth identity', t => {
     const testCase = scenario(t, {activeToken: 'token-b', cacheToken: 'token-a'});
     assert.equal(testCase.run('cached').update.ids.prs, undefined);
@@ -397,6 +432,39 @@ test('picker returns the latest ten unique rows and preserves all participation 
     assert.ok(output.items.every(row => row.subtitle.endsWith('Authored · Review requested')));
     assert.equal(testCase.searchCount(), 2);
     assert.equal(sqlite(testCase.cacheFile, 'SELECT count(*) FROM bodies;').trim(), '0');
+});
+
+test('combined search keeps the latest duplicate and classifies the terminal item route', () => {
+    const url = 'https://github.com/acme/pull/issues/7';
+    const older = {
+        html_url: url, number: 7, repository_url: 'https://api.github.com/repos/acme/pull',
+        title: 'Old issue title', updated_at: '2026-01-20T12:00:00Z', body: 'Old description'
+    };
+    const newer = {
+        ...older, title: 'New issue title', updated_at: '2026-01-20T12:00:02Z', body: 'New description'
+    };
+    const other = {
+        ...older, html_url: 'https://github.com/acme/pull/pull/8', number: 8,
+        updated_at: '2026-01-20T12:00:01Z'
+    };
+    const input = [
+        {category: 'prs:author', items: [other]},
+        {category: 'issues:assignee', items: [older]},
+        {category: 'issues:author', items: [newer]},
+        {category: 'issues:commenter', items: [{...newer, title: 'Same-time duplicate'}]}
+    ];
+    const result = execFileSync('/usr/bin/jq', [
+        '-f', path.join(packageScratch, 'search-results.jq'), '--arg', 'kind', 'all',
+        '--arg', 'iconDir', '/icons'
+    ], {input: JSON.stringify(input), encoding: 'utf8'});
+    const {items} = JSON.parse(result);
+    assert.deepEqual(items.map(row => row.uid), [url, other.html_url]);
+    assert.equal(items[0].title, newer.title);
+    assert.equal(items[0].body, newer.body);
+    assert.deepEqual(items[0].reasons, ['Assigned', 'Authored', 'Commented']);
+    assert.equal(items[0].kind, 'kindissue');
+    assert.match(items[0].icon.path, /-issue\.png$/);
+    assert.equal(items[1].kind, 'kindpr');
 });
 
 test('picker refreshes a same-account snapshot at the freshness threshold', t => {
