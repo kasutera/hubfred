@@ -14,7 +14,7 @@ open dist/hubfred.alfredworkflow
 
 `npm run package` packages the present, tracked files under `workflow/`, including uncommitted edits and excluding files removed from the working tree. Newly added workflow files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution. TypeScript sources under `scripts/` are type-checked with `npm run typecheck` and bundled into the generated JXA renderer in package staging; neither TypeScript source nor development tooling is included in the workflow. ES2020 is a JXA compatibility target matching the original syntax, not a Node.js target.
 
-The picker and dashboard share the Go backend in [`cmd/dashboard`](cmd/dashboard), including authentication, search, and SQLite snapshots. `load.sh` selects the native binary for this Mac. Alfred still drives the UI events, and the Markdown preview still renders through JXA.
+The picker and dashboard share the Go backend in [`cmd/dashboard`](cmd/dashboard), including authentication, search, and SQLite snapshots. `load.sh` selects the native binary for this Mac. Alfred calls `load.sh preview` directly for dashboard previews, and Markdown still renders through JXA.
 
 On macOS 15 or later, `npm test` builds the package and exercises search formatting, dashboard refresh decisions, and the production JXA Markdown renderer from that package with the locked Marked library. It also tests the sanitizer directly through Foundation in a test-only bundle. The sanitizer wrapper declares UTF-8 before its body because Foundation's TidyHTML parser needs the charset before parsing non-ASCII Markdown. Tests use synthetic GitHub CLI responses and do not require GitHub credentials or Alfred.
 
