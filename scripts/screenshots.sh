@@ -75,23 +75,29 @@ fi
 npm run package
 payload="$work/workflow"
 /usr/bin/unzip -q dist/hubfred.alfredworkflow -d "$payload"
-/bin/mv "$payload/prs.alfredui/load.sh" "$payload/prs.alfredui/load-live.sh"
 /bin/mkdir "$payload/demo-bin"
 /bin/cp scripts/screenshots/fixtures.json "$payload/demo-bin/"
 /usr/bin/install -m 755 scripts/screenshots/gh "$payload/demo-bin/gh"
-/bin/cat > "$payload/prs.alfredui/load.sh" <<'BASH'
+for entry in search.sh prs.alfredui/load.sh; do
+    /bin/mv "$payload/$entry" "$payload/${entry%.sh}-live.sh"
+    /bin/cat > "$payload/$entry" <<'BASH'
 #!/bin/bash
 set -euo pipefail
 entry_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
-demo_bin="$entry_dir/../demo-bin"
+case "${0##*/}" in
+    search.sh) demo_bin="$entry_dir/demo-bin" ;;
+    load.sh) demo_bin="$entry_dir/../demo-bin" ;;
+esac
 [[ -x "$demo_bin/gh" ]] || exit 1
 checksum=$(/usr/bin/shasum -a 256 "$demo_bin/fixtures.json")
 export GH_TOKEN="${checksum%% *}" TZ=UTC
 export alfred_workflow_cache="$HOME/Library/Caches/org.hubfred.screenshots"
 export PATH="$demo_bin:/usr/bin:/bin"
-exec /bin/bash "$entry_dir/load-live.sh" "$@"
+entry=${0##*/}
+exec /bin/bash "$entry_dir/${entry%.sh}-live.sh" "$@"
 BASH
-/bin/chmod 755 "$payload/prs.alfredui/load.sh"
+    /bin/chmod 755 "$payload/$entry"
+done
 /usr/bin/plutil -convert json -o - "$payload/info.plist" | /usr/bin/jq --arg bundle "$bundle" '
     .bundleid = $bundle | .name = "hubfred screenshots" | .readme = "Offline screenshot fixtures only."
     | ([.objects[] | select(.type == "alfred.workflow.action.openurl") | .uid]) as $unused

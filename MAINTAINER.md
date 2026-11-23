@@ -2,7 +2,7 @@
 
 ## Local Development
 
-The workflow requires macOS 15 or later to run. Build from the repository root with Go 1.24 or later, Node.js 24, npm, and `zip`. The build also works on Linux: Go cross-compiles the workflow backend for Apple Silicon and Intel Macs. The packaged workflow does not require Go or Node.js. Run `npm ci --ignore-scripts` on the first setup and when the lockfile changes.
+The workflow requires macOS 15 or later to run. Build from the repository root with Node.js 24, npm, and `zip`, on macOS or Linux. The packaged workflow uses macOS system tools and the GitHub CLI; it does not need Node.js or an architecture-specific executable. Run `npm ci --ignore-scripts` on the first setup and when the lockfile changes.
 
 ```bash
 npm ci --ignore-scripts
@@ -14,7 +14,7 @@ open dist/hubfred.alfredworkflow
 
 `npm run package` packages the present, tracked files under `workflow/`, including uncommitted edits and excluding files removed from the working tree. Newly added workflow files must be tracked by Git first. Marked's JavaScript and license are bundled only in the package, from the locked npm distribution. TypeScript sources under `scripts/` are type-checked with `npm run typecheck` and bundled into the generated JXA renderer in package staging; neither TypeScript source nor development tooling is included in the workflow. ES2020 is a JXA compatibility target matching the original syntax, not a Node.js target.
 
-The picker and dashboard share the Go backend in [`cmd/dashboard`](cmd/dashboard), including authentication, search, and SQLite snapshots. `load.sh` selects the native binary for this Mac. Alfred calls `load.sh preview` directly for dashboard previews, and Markdown still renders through JXA.
+[`search.sh`](workflow/search.sh) runs the picker, and [`load.sh`](workflow/prs.alfredui/load.sh) runs the dashboard. They share the search and SQLite cache scripts. Alfred calls `load.sh preview` directly for dashboard previews, and Markdown renders through JXA.
 
 On macOS 15 or later, `npm test` builds the package and exercises search formatting, dashboard refresh decisions, and the production JXA Markdown renderer from that package with the locked Marked library. It also tests the sanitizer directly through Foundation in a test-only bundle. The sanitizer wrapper declares UTF-8 before its body because Foundation's TidyHTML parser needs the charset before parsing non-ASCII Markdown. Tests use synthetic GitHub CLI responses and do not require GitHub credentials or Alfred.
 
