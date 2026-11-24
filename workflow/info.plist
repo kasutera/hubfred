@@ -83,27 +83,41 @@
             </dict>
         </dict>
         <dict>
-            <key>type</key><string>slider</string>
+            <key>type</key><string>popupbutton</string>
             <key>label</key><string>Dashboard results per search</string>
             <key>variable</key><string>hubfred_dashboard_limit</string>
-            <key>description</key><string>Maximum number of open results in each dashboard.</string>
+            <key>description</key><string>Maximum number of results per search category, before deduplication.</string>
             <key>config</key>
             <dict>
-                <key>defaultvalue</key><integer>100</integer>
-                <key>minvalue</key><integer>1</integer>
-                <key>maxvalue</key><integer>1000</integer>
+                <key>default</key><string>100</string>
+                <key>pairs</key>
+                <array>
+                    <array><string>10</string><string>10</string></array>
+                    <array><string>25</string><string>25</string></array>
+                    <array><string>50</string><string>50</string></array>
+                    <array><string>100</string><string>100</string></array>
+                    <array><string>200</string><string>200</string></array>
+                    <array><string>500</string><string>500</string></array>
+                    <array><string>1,000</string><string>1000</string></array>
+                </array>
             </dict>
         </dict>
         <dict>
-            <key>type</key><string>slider</string>
-            <key>label</key><string>Dashboard updated within (days)</string>
+            <key>type</key><string>popupbutton</string>
+            <key>label</key><string>Dashboard update period</string>
             <key>variable</key><string>hubfred_dashboard_days</string>
-            <key>description</key><string>Only include items updated within this many days; 0 means unrestricted.</string>
+            <key>description</key><string>Only include items updated within the selected period.</string>
             <key>config</key>
             <dict>
-                <key>defaultvalue</key><integer>0</integer>
-                <key>minvalue</key><integer>0</integer>
-                <key>maxvalue</key><integer>36500</integer>
+                <key>default</key><string>0</string>
+                <key>pairs</key>
+                <array>
+                    <array><string>No limit</string><string>0</string></array>
+                    <array><string>Last 7 days</string><string>7</string></array>
+                    <array><string>Last 30 days</string><string>30</string></array>
+                    <array><string>Last 90 days</string><string>90</string></array>
+                    <array><string>Last 365 days</string><string>365</string></array>
+                </array>
             </dict>
         </dict>
     </array>
